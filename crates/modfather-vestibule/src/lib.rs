@@ -12,11 +12,16 @@
 //! unit-tested, including the Wave 0 gate's exact requirement: "a manual
 //! conflict pick overrides last-wins on one path" without affecting any
 //! other path. [`vfs::VfsRoots`] models the three real on-disk roots
-//! (install, save/config, Data). LOOT (the generalized sorter) and real
+//! (install, save/config, Data). [`packing`] implements the Main/Textures
+//! archive-naming split from `docs/VESTIBULE.md`'s Pull step 3
+//! (`{stem}.bsa`/`{stem} - Textures.bsa`, `{stem} - Main.ba2`/
+//! `{stem} - Textures.ba2`) on top of `modfather-bsa`'s and
+//! `modfather-ba2`'s writers. LOOT (the generalized sorter) and real
 //! pull-pipeline wiring (`download-repo` -> `VCS`) are tracked as
 //! follow-up work.
 
 pub mod layering;
+pub mod packing;
 pub mod vfs;
 
 /// Re-exported so downstream crates can name the standalone engine and the

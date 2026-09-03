@@ -16,16 +16,19 @@
 //!   independently-decodable mip [`reader::TexChunk`]s, matching the
 //!   real streaming-mip design instead of treating a texture as one blob.
 //!
-//! Status: Wave 0. Read path (GNRL + DX10, both codecs) is implemented and
-//! unit-tested against synthetic fixtures. The writer (pack per Bethesda
-//! doctrine, with real compression rather than the reference's
-//! uncompressed-only GNRL writer) and gating against real-world BA2
-//! fixtures are tracked as immediate follow-up work (see
-//! `docs/SCHEDULE.md`, Wave 0).
+//! Status: Wave 0. Read path (GNRL + DX10, both codecs) and the GNRL write
+//! path (with real compression, fixing the reference's uncompressed-only
+//! writer) are implemented and unit-tested against synthetic fixtures,
+//! including a full write-then-read round trip. A DX10 (texture-chunk)
+//! writer and gating against real-world BA2 fixtures are tracked as
+//! follow-up work (see `docs/SCHEDULE.md`, Wave 0).
 
 pub mod error;
 pub mod format;
+pub mod hash;
 pub mod reader;
+pub mod writer;
 
 pub use error::{Error, Result};
 pub use reader::{Ba2Archive, Ba2Entry, EntryKind, TexChunk};
+pub use writer::{write, FileToPack, WriteOptions};

@@ -14,13 +14,19 @@
 //!   out of scope here (see `docs/SCHEDULE.md`); this crate only claims
 //!   v103-105 (Gamebryo/Creation-engine BSA).
 //!
-//! Status: Wave 0, read path implemented and gated by tests against a
-//! synthetic fixture; write/pack path and real-world fixture gating are
-//! tracked as follow-up work.
+//! Status: Wave 0. Read path (v103-105, version-aware zlib/LZ4) and write
+//! path (spec-conforming hash-sorted pack, matching the reader's codec
+//! choice) are both implemented and unit-tested against synthetic
+//! fixtures, including a full write-then-read round trip. Real-world
+//! fixture gating (against an actual game BSA) is tracked as follow-up
+//! work.
 
 pub mod error;
 pub mod format;
+pub mod hash;
 pub mod reader;
+pub mod writer;
 
 pub use error::{Error, Result};
 pub use reader::{BsaArchive, BsaEntry};
+pub use writer::{write, FileToPack, WriteOptions};

@@ -418,7 +418,7 @@ fn read_substreams_info<R: Read>(r: &mut R, folders: &[Folder]) -> Result<SubStr
         }
     }
 
-    while id[0] != K_END {
+    if id[0] != K_END {
         return Err(Error::Malformed(format!(
             "unexpected id {:#x} in SubStreamsInfo",
             id[0]

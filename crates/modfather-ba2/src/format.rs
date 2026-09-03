@@ -7,7 +7,7 @@
 //! split.
 
 /// 4-byte magic at the start of every BA2 file.
-pub const MAGIC: [u8; 4] = [b'B', b'T', b'D', b'X'];
+pub const MAGIC: [u8; 4] = *b"BTDX";
 
 /// 4-byte type tag for the general-purpose (non-texture) format.
 pub const TYPE_GNRL: [u8; 4] = *b"GNRL";
