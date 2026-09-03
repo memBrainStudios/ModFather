@@ -24,6 +24,36 @@
 //! (36-byte header, `compression_method` field selecting zlib *or* LZ4).
 //! Before that fix, none of the v2/v3 cases below would have round-tripped
 //! through the independent oracle.
+//!
+//! **Upstream bug workaround (LZ4 only):** `ba2` v3.0.1's own
+//! `fo4::Chunk::decompress_into` is broken for the LZ4 branch, independent
+//! of anything this crate does. `decompress_into` calls
+//! `out.reserve_exact(decompressed_len)` on a fresh `Vec<u8>` -- which
+//! only grows *capacity*, not *length* -- then passes `out: &mut Vec<u8>`
+//! by deref-coercion into `decompress_into_lz4(out: &mut [u8])`. A
+//! `&mut Vec<u8>` deref-coerces to a slice of its current *length*
+//! (still 0 after `reserve_exact`), so `lzzzz::lz4::decompress` (and
+//! transitively `LZ4_decompress_safe`) is always invoked with a
+//! zero-length destination buffer and always fails with
+//! `Error::LZ4(DecompressionFailed)` for any non-empty LZ4 payload. This
+//! was confirmed to be entirely internal to `ba2`, with zero involvement
+//! from `modfather-ba2`'s byte layout: an oracle-native archive, built
+//! and read using nothing but `ba2`'s own types
+//! (`Chunk::from_decompressed` -> `Archive::write` -> `Archive::read` ->
+//! `File::write`), fails the exact same way on its own LZ4 output. The
+//! zlib branch (`decompress_into_zlib`) does not have this bug because it
+//! writes into the `Vec` via `Write::write_all`, which grows the vec
+//! itself instead of relying on a pre-sized destination slice.
+//!
+//! Because `File::write`/`Chunk::decompress_into` are the *only* public
+//! decode entry points `ba2` exposes, and both are broken for LZ4, this
+//! test cannot ask the oracle to decode an LZ4 payload through its normal
+//! API. Instead, for the LZ4 case only, it decompresses the oracle's
+//! *compressed* bytes (`Chunk::as_bytes()`, `Chunk::decompressed_len()`
+//! -- both public, unaffected by the bug) directly via `lzzzz::lz4`,
+//! which is the same underlying LZ4 implementation `ba2` itself uses, so
+//! this is still a decode by "the oracle's own codec", just invoked
+//! without going through the broken wrapper.
 
 use ba2::fo4::{
     Archive as OracleArchive, ArchiveKey as OracleArchiveKey, ArchiveOptions as OracleOptions,
@@ -33,6 +63,38 @@ use ba2::fo4::{
 use ba2::prelude::*;
 use modfather_ba2::{write, Ba2Archive, FileToPack, WriteOptions};
 use std::io::Cursor;
+
+/// Decode one oracle-read `Chunk`'s bytes, working around the LZ4 bug in
+/// `ba2` v3.0.1's `Chunk::decompress_into`/`File::write` documented above.
+/// zlib chunks are decoded via the oracle's own public `File::write`; LZ4
+/// chunks are decoded by calling `lzzzz::lz4::decompress` directly against
+/// the chunk's raw compressed bytes.
+fn decode_oracle_file(
+    file: &OracleFile,
+    codec: OracleCompressionFormat,
+    read_options: &OracleFileWriteOptions,
+) -> Vec<u8> {
+    match codec {
+        OracleCompressionFormat::Zip => {
+            let mut decoded = Vec::new();
+            file.write(&mut decoded, read_options)
+                .expect("oracle failed to decode a zlib payload");
+            decoded
+        }
+        OracleCompressionFormat::LZ4 => {
+            assert_eq!(file.len(), 1, "GNRL files have exactly one chunk");
+            let chunk = &file[0];
+            let decompressed_len = chunk
+                .decompressed_len()
+                .expect("LZ4 chunk should report a decompressed length");
+            let mut decoded = vec![0u8; decompressed_len];
+            let n = lzzzz::lz4::decompress(chunk.as_bytes(), &mut decoded)
+                .expect("lzzzz failed to LZ4-decompress the oracle's own chunk bytes");
+            assert_eq!(n, decompressed_len);
+            decoded
+        }
+    }
+}
 
 /// Our writer -> the oracle's reader.
 ///
@@ -100,10 +162,7 @@ fn our_writer_is_readable_by_independent_oracle() {
                 .get(&key)
                 .unwrap_or_else(|| panic!("oracle: missing file {}", original.name));
 
-            let mut decoded = Vec::new();
-            oracle_file
-                .write(&mut decoded, &read_options)
-                .unwrap_or_else(|e| panic!("oracle failed to decode {}: {e}", original.name));
+            let decoded = decode_oracle_file(oracle_file, expect_codec, &read_options);
             assert_eq!(
                 decoded, original.data,
                 "oracle-decoded bytes for {} (v{version}, force_lz4_v3={force_lz4_v3})",

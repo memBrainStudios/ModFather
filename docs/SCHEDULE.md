@@ -15,6 +15,17 @@ Custody for every wave: Vestibule owns files; Crucible owns the domain/editor fr
 
 **Gate:** round-trip a real 7z archive through the standalone package alone (no BSA/BA2 dependency); separately, list + extract a real BSA and a real BA2 through the extension crates; pack a stem back to `{stem}.bsa` / `{stem} - Textures.bsa` and `{stem} - Main.ba2` / `{stem} - Textures.ba2`; a manual conflict pick overrides last-wins on one path.
 
+**Gate status (in progress):**
+- 7z round trip (`sevenzip-re`): synthetic-fixture round trips (Copy/LZMA/LZMA2) pass; a real 7z archive produced by the system `7z` binary is read back correctly in a dev-only test fixture (`crates/sevenzip-re/tests/roundtrip.rs::read_real_7z_fixture_created_by_system_binary`) -- this is a one-way check (external `7z` writes, our reader reads); no packing-side real-archive fixture yet.
+- BSA/BA2 real-archive fixtures: genuine Bethesda-game-shipped BSA/BA2 files are copyrighted game assets and are not available in this sandbox (no licensed game install). Real-world validation is unblocked without needing licensed archives by using the independently-written, 0BSD-licensed `ba2` crate (crates.io) as a **dev-only test oracle** in both `modfather-bsa` and `modfather-ba2` (`tests/oracle_cross_validation.rs` in each crate; never a runtime dependency). Both directions (our writer → oracle reader, oracle writer → our reader) pass for BSA (v103/104/105, zlib and LZ4) and for BA2 (v1/v2/v3, zlib and LZ4).
+  - This process found and fixed four real structural bugs, all now covered by regression tests:
+    1. **BSA v105 LZ4 framing** (`modfather-bsa`): the reader/writer used LZ4 *frame* format instead of the real *block* format Skyrim SE actually uses.
+    2. **BA2 v2/v3 header extension** (`modfather-ba2`): the base 24-byte BA2 header is only correct for v1/v7/v8; v2 needs +8 reserved bytes, v3 needs +8 reserved bytes plus a genuine per-archive `compression_method: u32` field. The old code always assumed the fixed 24-byte header.
+    3. **BA2 v2/v3 codec dispatch** (`modfather-ba2`): v2 was wrongly treated as always-LZ4 (it's always zlib); v3's codec was guessed from the version number instead of read from the real per-archive `compression_method` field.
+    4. **BA2 GNRL file-record `chunk_size`/`numChunks` fields** (`modfather-ba2`): the writer wrote these as a blind zero `u32`, but real readers validate them as `numChunks=1, chunkHeaderSize=0x10` for GNRL files.
+  - Also found (and worked around in the test, not a ModFather bug): `ba2` crate v3.0.1's own `Chunk::decompress_into` is broken for its LZ4 branch (`out.reserve_exact(len)` only grows capacity, not length, before deref-coercing to a zero-length destination slice) -- confirmed via an oracle-only, zero-ModFather-code repro. Documented in `modfather-ba2/tests/oracle_cross_validation.rs`; worked around by decompressing the oracle's own compressed bytes directly via `lzzzz::lz4` for that one case.
+- No LOOT sorter stub yet; no real pull-pipeline wiring yet. Gate is not yet fully closed pending those and a genuine licensed-archive spot check (offered by the project owner, not yet performed).
+
 ---
 
 ## Wave 1 — MOD and MGE as state containers

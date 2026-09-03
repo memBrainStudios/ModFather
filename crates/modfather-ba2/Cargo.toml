@@ -21,3 +21,10 @@ tempfile = "3"
 # dependency of this crate or of the ModFather product -- see
 # docs/SCHEDULE.md's Wave 0 gate note on real-world fixture validation.
 ba2 = "3.0"
+# Also dev-only: needed to work around a bug in ba2 v3.0.1's own
+# Chunk::decompress_into for the LZ4 branch (see the doc comment on
+# `our_writer_is_readable_by_independent_oracle` in
+# tests/oracle_cross_validation.rs for the full writeup) by calling the
+# same underlying LZ4 decompressor ba2 uses, with a correctly-sized
+# destination buffer.
+lzzzz = "1.1"
