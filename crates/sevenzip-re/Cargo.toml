@@ -1,0 +1,15 @@
+[package]
+name = "sevenzip-re"
+version = "0.1.0"
+description = "Clean-room, standalone Rust implementation of the 7z container and its core codecs (Copy, LZMA, LZMA2). No Bethesda-specific code, no host 7z binary, no game dependency."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+lzma-rs = { version = "0.3", features = ["raw_decoder"] }
+crc32fast = "1.4"
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3"

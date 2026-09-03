@@ -1,0 +1,16 @@
+[package]
+name = "modfather-vestibule"
+version = "0.1.0"
+description = "Vestibule: VFS roots, last-wins layering with explicit picks, compare tooltips. Depends on 7-Zip RE standalone plus the Bethesda archive extension crates. Wave 0 floor."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sevenzip-re = { path = "../sevenzip-re" }
+modfather-bsa = { path = "../modfather-bsa" }
+modfather-ba2 = { path = "../modfather-ba2" }
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3"

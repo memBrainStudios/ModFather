@@ -1,0 +1,17 @@
+[package]
+name = "modfather-bsa"
+version = "0.1.0"
+description = "Bethesda BSA (v103-105) archive extension for 7-Zip RE. Separate deliverable from the sevenzip-re standalone package."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sevenzip-re = { path = "../sevenzip-re" }
+flate2 = "1.1"
+lz4_flex = "0.14"
+crc32fast = "1.4"
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3"
