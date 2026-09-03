@@ -4,24 +4,26 @@ File management member of ModFather. ModFather is the project. FOMOD is the UI. 
 
 ## Members
 
-- **7-Zip RE** — archive formats, including BSA and BA2; lock/unlock compression of `.mod` packages; read-only navigation of nested archives.
-- **LOOT** — sort order for the Vestibule listing and for plugins, including category keys.
+- **7-Zip RE** — source archives (7z, zip, BSA, BA2, …) are immutable. Extract into the MGE tree. Auto-pack loose files to BSA/BA2 when LOOT allows.
+- **LOOT** — sort, categories, and pack-forbid rules.
 
-FOMOD subscribes to Vestibule. Vestibule subscribes to 7-Zip RE. Vestibule mounts the current **MGE**.
+Official 7-Zip reference only: [memBrainStudios/7zip](https://github.com/memBrainStudios/7zip) (ip7z/7zip 26.02). No zstd fork.
 
-## `.mod`
+## MOD
 
-- Id: `nexus:{gameDomain}:{modId}`, else `{service}:{id}`, else `hash:{sha256}` of the manifest.
-- Holds the family of archives from that source page.
-- Nested archives are never altered.
-- Locked = compressed. Cannot become Active until Unlocked.
-- **Active** = the user selected this MOD in FOMOD. Open view. Inactive = one line (full name) or a representative image.
+A MOD **references** archives. It does not embed them. It stores per-MGE state: which files are present, FOMOD selection, and Off / On / Active.
+
+- Off — not contributing. Closed row.
+- On — contributing. Closed row (full name or image).
+- Active — selected in FOMOD. Open view. Requires On. One Active at a time.
+
+No compressed MOD package. No lock slider.
 
 ## Derived FOMOD
 
 - Radio buttons when destination paths conflict.
 - Checkboxes when they do not.
 
-## MGE
+FOMOD state is the access key into that MOD’s nested folders.
 
-See [MGE.md](MGE.md).
+Compatibility steps that name other MODs: present MODs are available; missing MODs are requested from the host (collection-style pull). Conflicts among On MODs are bashed.
