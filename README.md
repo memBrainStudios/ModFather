@@ -12,7 +12,7 @@ One-way custody chain:
 7-Zip RE  →  Vestibule  →  Crucible  →  ModFather (shell / integrator)
 ```
 
-- **7-Zip RE** — clean-room codec registry: 7z, zip, BSA (v103–105), BA2 (GNRL/DX10) as first-class handlers, equal to 7z/zip. RAR is a placeholder pending license. Reference tree (26.02): https://github.com/memBrainStudios/7zip — rewrite, do not translate.
+- **7-Zip RE** — clean-room, full standalone Rust implementation of the 7z container and its codecs, ships as its own redistributable package. BSA (v103–105) and BA2 (GNRL/DX10) are **separate Bethesda archive extension crates** that plug into 7-Zip RE's container registry — not bundled into the standalone package. RAR is a placeholder pending license, in neither deliverable until then. Reference tree (26.02): https://github.com/memBrainStudios/7zip — rewrite, do not translate.
 - **Vestibule** — file management only: VFS roots (game install, save/config, Data), last-wins layering with explicit 1:1 picks, compare tooltips, and **LOOT** (generalized sorter: Nexus categories, traditional masterlist, user rules). Details: [docs/VESTIBULE.md](docs/VESTIBULE.md).
 - **Crucible** — the editor system-of-systems: Records (xEdit-class), NIF (NifSkope-class, with BodySlide/Outfit Studio as features), Materials, Textures, Papyrus, Animation/LOD, Localization/Audio/UI/Saves. Depends on Vestibule only. Details: [docs/CRUCIBLE.md](docs/CRUCIBLE.md).
 - **ModFather shell** — native desktop UI and per-game extender launch. FOMOD is the UI; Rhai is the interactive layer inside it. Never a web/Electron stack.
@@ -23,7 +23,7 @@ Full wave-by-wave build order: [docs/SCHEDULE.md](docs/SCHEDULE.md).
 
 The misnamed `anvil` repository was a first-pass scaffold. New work goes here.
 
-Suggested crate prefix (change if you want a different one): `modfather-*`. Archive work is suggested as `sevenzip-re`, not a separate BSA crate.
+Suggested crate prefix (change if you want a different one): `modfather-*`. The standalone 7z engine is `sevenzip-re`; BSA/BA2 are separate extension crates under the `modfather-*` prefix, not folded into `sevenzip-re`.
 
 ## Principles
 

@@ -9,6 +9,11 @@ File management member of ModFather. ModFather is the project. FOMOD is the UI. 
 
 Official 7-Zip reference only: [memBrainStudios/7zip](https://github.com/memBrainStudios/7zip) (ip7z/7zip 26.02).
 
+## 7-Zip RE is two deliverables
+
+- **Standalone package** (`sevenzip-re`) — a complete, independent Rust implementation of the 7z container and its core codecs (Copy, LZMA, LZMA2; more filters later). No Bethesda-specific code, no game dependency. It is redistributable on its own. RAR stays a placeholder pending license and ships in neither deliverable until then.
+- **Bethesda archive extension** (separate crate(s), e.g. `modfather-bsa`, `modfather-ba2`) — BSA (v103–105) and BA2 (GNRL/DX10) are Bethesda's own container formats, not 7z. They plug into 7-Zip RE's container registry as additional handlers, equal in standing to 7z, but they are **not bundled into the standalone package**. Vestibule depends on the standalone package plus these extension crates; a consumer who only wants general-purpose 7z support does not have to pull in Bethesda format code.
+
 ## Lock slider
 
 Two-position control on the MGE. Unlocked = this MOD is explicitly included in the MGE. Locked = not included. Not compression. New MGE: viable MODs start Locked.

@@ -8,11 +8,12 @@ Custody for every wave: Vestibule owns files; Crucible owns the domain/editor fr
 
 ## Wave 0 — Vestibule floor
 
-- **7-Zip RE**: list/extract for 7z, zip, BSA (v103–105), BA2 (GNRL, DX10). Pack for BSA/BA2 per Bethesda doctrine (see `VESTIBULE.md`). RAR stays a placeholder.
+- **7-Zip RE standalone** (`sevenzip-re`): native Rust 7z container read/write with Copy/LZMA/LZMA2 codecs. No Bethesda code, no host `7z` binary, no game dependency. Independently redistributable.
+- **Bethesda archive extensions** (separate crates, e.g. `modfather-bsa`, `modfather-ba2`): BSA (v103–105) and BA2 (GNRL, DX10) read/write, registered as additional container handlers alongside 7z — never folded into the standalone package. Pack per Bethesda doctrine (see `VESTIBULE.md`).
 - **LOOT**: generalized sorter stub — Nexus categories, traditional masterlist, user rules — even if the rule engine is thin at first.
 - **Vestibule** VFS roots, last-wins layering, compare tooltips.
 
-**Gate:** list + extract a real BSA and a real BA2; pack a stem back to `{stem}.bsa` / `{stem} - Textures.bsa` and `{stem} - Main.ba2` / `{stem} - Textures.ba2`; a manual conflict pick overrides last-wins on one path.
+**Gate:** round-trip a real 7z archive through the standalone package alone (no BSA/BA2 dependency); separately, list + extract a real BSA and a real BA2 through the extension crates; pack a stem back to `{stem}.bsa` / `{stem} - Textures.bsa` and `{stem} - Main.ba2` / `{stem} - Textures.ba2`; a manual conflict pick overrides last-wins on one path.
 
 ---
 
