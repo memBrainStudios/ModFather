@@ -4,15 +4,28 @@
 //! rationale as `modfather-bsa`: BA2 is Bethesda's own container format,
 //! not 7z, and must never be folded into the standalone engine.
 //!
-//! Status: Wave 0 scaffold only. The reference implementation's GNRL/DX10
-//! byte layouts (36-byte GNRL records, 24-byte DX10 headers + 24-byte chunk
-//! records) and its two known gaps — (a) `ZlibDecoder` used unconditionally
-//! even though Starfield-era BA2 chunks use LZ4, and (b) the writer only
-//! ever emits uncompressed GNRL archives — are documented in the project's
-//! working notes as the redesign targets for this crate's read/write paths.
-//! Implementing and gate-testing them against real BA2 fixtures is tracked
-//! as immediate follow-up work (see `docs/SCHEDULE.md`, Wave 0).
+//! Redesigned from the reference implementation's known gaps:
+//! - Codec dispatch is **version-aware**: the reference used
+//!   `flate2::ZlibDecoder` unconditionally for every payload, which is
+//!   wrong for Starfield-era (v2/v3) archives that use LZ4. This crate
+//!   picks zlib vs. LZ4 from the archive version (see
+//!   [`format::default_codec_for_version`]), and also honors
+//!   `packedSize == 0` (Archive2's "no compression" option), which the
+//!   reference reader did not handle explicitly.
+//! - DX10 (texture) entries are modeled as a header plus a list of
+//!   independently-decodable mip [`reader::TexChunk`]s, matching the
+//!   real streaming-mip design instead of treating a texture as one blob.
+//!
+//! Status: Wave 0. Read path (GNRL + DX10, both codecs) is implemented and
+//! unit-tested against synthetic fixtures. The writer (pack per Bethesda
+//! doctrine, with real compression rather than the reference's
+//! uncompressed-only GNRL writer) and gating against real-world BA2
+//! fixtures are tracked as immediate follow-up work (see
+//! `docs/SCHEDULE.md`, Wave 0).
 
 pub mod error;
+pub mod format;
+pub mod reader;
 
 pub use error::{Error, Result};
+pub use reader::{Ba2Archive, Ba2Entry, EntryKind, TexChunk};

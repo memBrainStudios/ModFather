@@ -7,9 +7,17 @@
 //! Bethesda format code (that dependency direction is enforced by this
 //! crate depending *down* on the extensions, never the other way around).
 //!
-//! Status: Wave 0 scaffold. Real VFS-root and last-wins-layering logic is
-//! tracked as immediate follow-up work (see `docs/SCHEDULE.md`, Wave 0
-//! gate).
+//! Status: Wave 0. [`layering::resolve`] implements last-wins layering plus
+//! explicit 1:1 picks (the "Bash" behavior in `docs/VESTIBULE.md`) and is
+//! unit-tested, including the Wave 0 gate's exact requirement: "a manual
+//! conflict pick overrides last-wins on one path" without affecting any
+//! other path. [`vfs::VfsRoots`] models the three real on-disk roots
+//! (install, save/config, Data). LOOT (the generalized sorter) and real
+//! pull-pipeline wiring (`download-repo` -> `VCS`) are tracked as
+//! follow-up work.
+
+pub mod layering;
+pub mod vfs;
 
 /// Re-exported so downstream crates can name the standalone engine and the
 /// Bethesda extensions through a single `modfather-vestibule` dependency
