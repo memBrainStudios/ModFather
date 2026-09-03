@@ -6,6 +6,12 @@
 //! 2. Its writer only ever emitted uncompressed GNRL archives.
 //!    (The writer side is tracked as follow-up work in this crate; see
 //!    `docs/SCHEDULE.md`.)
+//!
+//! Also fixes a third, later-discovered gap (via oracle cross-validation,
+//! see `tests/oracle_cross_validation.rs` and `format::header_size_for_version`):
+//! v2/v3 (Starfield) archives have a header extension beyond the base
+//! 24 bytes, and v3's payload codec is a real per-archive
+//! `compression_method` field, not implied by the version number alone.
 
 use crate::error::{Error, Result};
 use crate::format::*;
@@ -98,7 +104,24 @@ impl<R: Read + Seek> Ba2Archive<R> {
         let num_files = read_u32_le(&mut reader)? as usize;
         let name_table_offset = read_u64_le(&mut reader)?;
 
-        let codec = default_codec_for_version(version);
+        // Starfield (v2/v3) header extension -- see the doc comment on
+        // `format::header_size_for_version` for why this exists and how
+        // it was discovered (oracle cross-validation against the `ba2`
+        // crate, corroborated by ByroRedux's format notes).
+        let codec = if version == version::V2 {
+            // v2: 8 reserved bytes, no compression-method field. Always zlib.
+            let mut reserved = [0u8; 8];
+            reader.read_exact(&mut reserved)?;
+            PayloadCodec::Zlib
+        } else if version == version::V3 {
+            // v3: 8 reserved bytes + a real compression_method: u32.
+            let mut reserved = [0u8; 8];
+            reader.read_exact(&mut reserved)?;
+            let method = read_u32_le(&mut reader)?;
+            codec_for_compression_method(method)
+        } else {
+            default_codec_for_version(version)
+        };
 
         let entries = if type_tag == TYPE_GNRL {
             Self::read_gnrl_entries(&mut reader, num_files)?

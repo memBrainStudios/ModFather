@@ -2,14 +2,27 @@
 //!
 //! Fixes the reference implementation's second known gap: its writer only
 //! ever emitted uncompressed GNRL archives. This writer supports real
-//! compression (zlib for v1/v7/v8, LZ4 for v2/v3 — matching the reader's
-//! own version-aware codec choice) as well as an uncompressed mode.
+//! compression (zlib for v1/v2/v7/v8; v3 defaults to zlib but can opt into
+//! LZ4 via [`WriteOptions::force_lz4_v3`] -- see the header-layout note
+//! below) as well as an uncompressed mode.
+//!
+//! **Starfield (v2/v3) header extension**: fixed to match the real
+//! on-disk layout after oracle cross-validation surfaced that v2/v3 are
+//! longer than the base 24-byte header this writer used to emit
+//! unconditionally -- see `format::header_size_for_version` and its doc
+//! comment for the full explanation and the two independent sources that
+//! confirmed it (the `ba2` crate's own writer, and ByroRedux's format
+//! notes). v2 gets 8 reserved zero bytes; v3 gets 8 reserved zero bytes
+//! plus a real `compression_method: u32` field.
 //!
 //! DX10 (texture-chunk) packing is out of scope for this writer: BA2
 //! "Main" archives (which this writer targets, per `docs/VESTIBULE.md`'s
 //! `{stem} - Main.ba2` naming) are GNRL; DX10 (`{stem} - Textures.ba2`) is
 //! a separate, more involved packer (chunked streaming mips) tracked as
-//! follow-up work.
+//! follow-up work. Real v3 archives are DX10 by convention, but this
+//! writer still emits a structurally-correct v3 *GNRL* header extension
+//! if a caller passes `version: 3`, since nothing in the format forbids
+//! it and it keeps the reader/writer symmetric for testing.
 
 use crate::error::{Error, Result};
 use crate::format::{self, version, MAGIC, TYPE_GNRL};
@@ -30,12 +43,17 @@ pub struct FileToPack {
 #[derive(Debug, Clone, Copy)]
 pub struct WriteOptions {
     pub version: u32,
-    /// When true, every payload is compressed with the version-appropriate
-    /// codec (see [`format::default_codec_for_version`]) and its
-    /// `packedSize` field reflects the compressed length. When false,
-    /// `packedSize` is written as 0 (uncompressed, read verbatim), matching
-    /// the reader's own handling of Archive2's "no compression" option.
+    /// When true, every payload is compressed and its `packedSize` field
+    /// reflects the compressed length. When false, `packedSize` is
+    /// written as 0 (uncompressed, read verbatim), matching the reader's
+    /// own handling of Archive2's "no compression" option.
     pub compress: bool,
+    /// Only meaningful when `version == 3`: selects LZ4 block compression
+    /// (writing `compression_method = 3` in the v3 header extension)
+    /// instead of the default zlib (`compression_method = 0`). Ignored
+    /// for every other version, which are always zlib -- see the
+    /// module-level doc comment and `format::codec_for_compression_method`.
+    pub force_lz4_v3: bool,
 }
 
 impl Default for WriteOptions {
@@ -43,6 +61,7 @@ impl Default for WriteOptions {
         WriteOptions {
             version: version::V1,
             compress: true,
+            force_lz4_v3: false,
         }
     }
 }
@@ -58,6 +77,16 @@ fn write_u64_le<W: Write>(w: &mut W, v: u64) -> Result<()> {
 fn write_u16_le<W: Write>(w: &mut W, v: u16) -> Result<()> {
     w.write_all(&v.to_le_bytes())?;
     Ok(())
+}
+
+/// v3's on-disk `compression_method` field value for a given codec choice
+/// (0 = zlib, 3 = LZ4 block; see `format::codec_for_compression_method`
+/// for the read-side counterpart).
+fn compression_method_field(codec: format::PayloadCodec) -> u32 {
+    match codec {
+        format::PayloadCodec::Lz4 => 3,
+        format::PayloadCodec::Zlib => 0,
+    }
 }
 
 fn compress_payload(codec: format::PayloadCodec, data: &[u8]) -> Result<Vec<u8>> {
@@ -97,7 +126,15 @@ pub fn write<W: Write + Seek>(
     files: &[FileToPack],
     options: &WriteOptions,
 ) -> Result<()> {
-    let codec = format::default_codec_for_version(options.version);
+    let codec = if options.version == version::V3 {
+        if options.force_lz4_v3 {
+            format::PayloadCodec::Lz4
+        } else {
+            format::PayloadCodec::Zlib
+        }
+    } else {
+        format::default_codec_for_version(options.version)
+    };
     let num_files = files.len() as u32;
 
     // Normalize names up front; BA2's own on-disk order is not
@@ -109,13 +146,22 @@ pub fn write<W: Write + Seek>(
         .map(|f| f.name.replace('/', "\\").to_lowercase())
         .collect();
 
-    // ---- Header (24 bytes) ----
+    // ---- Header (24 bytes, plus a version-dependent extension) ----
     writer.write_all(&MAGIC)?;
     write_u32_le(&mut writer, options.version)?;
     writer.write_all(&TYPE_GNRL)?;
     write_u32_le(&mut writer, num_files)?;
     let name_table_offset_pos = current_pos(&mut writer)?;
     write_u64_le(&mut writer, 0)?; // nameTableOffset placeholder
+
+    // Starfield (v2/v3) header extension -- see the module-level doc
+    // comment and `format::header_size_for_version` for why this exists.
+    if options.version == version::V2 {
+        write_u64_le(&mut writer, 0)?; // 8 reserved bytes, no known meaning
+    } else if options.version == version::V3 {
+        write_u64_le(&mut writer, 0)?; // 8 reserved bytes
+        write_u32_le(&mut writer, compression_method_field(codec))?;
+    }
 
     // ---- F4GeneralInfo records (36 bytes each), placeholders for
     // offset/packedSize/unpackedSize patched after payloads are written ----
@@ -126,7 +172,12 @@ pub fn write<W: Write + Seek>(
         write_u32_le(&mut writer, h.file)?;
         writer.write_all(&ext_field(name))?;
         write_u32_le(&mut writer, h.directory)?;
-        write_u32_le(&mut writer, 0)?; // unk0C
+        // unk0C(u8)=0, numChunks(u8), chunkHeaderSize(u16): real readers
+        // (confirmed against the independent `ba2` crate oracle) validate
+        // numChunks/chunkHeaderSize for GNRL as (1, 0x10) -- see
+        // `format::GNRL_NUM_CHUNKS`/`format::GNRL_CHUNK_HEADER_SIZE`.
+        writer.write_all(&[0u8, format::GNRL_NUM_CHUNKS])?;
+        write_u16_le(&mut writer, format::GNRL_CHUNK_HEADER_SIZE)?;
         offset_patch_positions.push(current_pos(&mut writer)?);
         write_u64_le(&mut writer, 0)?; // offset placeholder
         packed_size_patch_positions.push(current_pos(&mut writer)?);

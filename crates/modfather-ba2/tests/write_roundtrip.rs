@@ -1,5 +1,10 @@
 //! Write -> read round-trip tests for the BA2 (GNRL) writer, proving it
 //! produces archives this crate's own reader can parse correctly.
+//!
+//! v2/v3 cases here also exercise the Starfield header-extension fix
+//! (see `format::header_size_for_version`'s doc comment): v2 is always
+//! zlib, and v3's codec is a real per-archive `compression_method` field
+//! (`WriteOptions::force_lz4_v3`) rather than implied by version number.
 
 use modfather_ba2::{write, Ba2Archive, EntryKind, FileToPack, WriteOptions};
 use std::io::Cursor;
@@ -25,6 +30,7 @@ fn v1_zlib_round_trip_multiple_files() {
     let options = WriteOptions {
         version: 1,
         compress: true,
+        force_lz4_v3: false,
     };
 
     let mut archive = pack_and_open(&files, &options);
@@ -45,7 +51,10 @@ fn v1_zlib_round_trip_multiple_files() {
 }
 
 #[test]
-fn v2_lz4_round_trip() {
+fn v2_is_always_zlib_round_trip() {
+    // v2 (Starfield GNRL) has no per-archive compression_method field --
+    // it is always zlib. This also exercises the 8-byte v2 header
+    // extension this crate now reads/writes (see module docs).
     let files = vec![FileToPack {
         name: "Sound/FX/click.wav".to_string(),
         data: b"pretend wav bytes, repeated for compressibility ".repeat(30),
@@ -53,10 +62,51 @@ fn v2_lz4_round_trip() {
     let options = WriteOptions {
         version: 2,
         compress: true,
+        force_lz4_v3: false, // ignored for v2, included for clarity
     };
 
     let mut archive = pack_and_open(&files, &options);
     assert_eq!(archive.version(), 2);
+    let out = archive.read_file(0).unwrap();
+    assert_eq!(out, files[0].data);
+}
+
+#[test]
+fn v3_default_zlib_round_trip() {
+    // v3 with force_lz4_v3 = false must write compression_method = 0
+    // (zlib) in its 12-byte header extension and round-trip correctly.
+    let files = vec![FileToPack {
+        name: "Textures/rocks/boulder01_d.dds".to_string(),
+        data: b"pretend dds bytes, repeated for compressibility ".repeat(40),
+    }];
+    let options = WriteOptions {
+        version: 3,
+        compress: true,
+        force_lz4_v3: false,
+    };
+
+    let mut archive = pack_and_open(&files, &options);
+    assert_eq!(archive.version(), 3);
+    let out = archive.read_file(0).unwrap();
+    assert_eq!(out, files[0].data);
+}
+
+#[test]
+fn v3_forced_lz4_round_trip() {
+    // v3 with force_lz4_v3 = true must write compression_method = 3
+    // (LZ4 block) and this crate's own reader must decode it correctly.
+    let files = vec![FileToPack {
+        name: "Textures/rocks/boulder01_n.dds".to_string(),
+        data: b"pretend normal-map dds bytes, repeated for compressibility ".repeat(40),
+    }];
+    let options = WriteOptions {
+        version: 3,
+        compress: true,
+        force_lz4_v3: true,
+    };
+
+    let mut archive = pack_and_open(&files, &options);
+    assert_eq!(archive.version(), 3);
     let out = archive.read_file(0).unwrap();
     assert_eq!(out, files[0].data);
 }
@@ -70,6 +120,7 @@ fn uncompressed_round_trip() {
     let options = WriteOptions {
         version: 1,
         compress: false,
+        force_lz4_v3: false,
     };
 
     let mut archive = pack_and_open(&files, &options);

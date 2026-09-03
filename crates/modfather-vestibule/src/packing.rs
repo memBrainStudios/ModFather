@@ -147,7 +147,11 @@ fn pack_ba2_group(
         })
         .collect();
 
-    let options = modfather_ba2::WriteOptions { version, compress };
+    let options = modfather_ba2::WriteOptions {
+        version,
+        compress,
+        force_lz4_v3: false,
+    };
     let mut buf = Vec::new();
     modfather_ba2::write(std::io::Cursor::new(&mut buf), &to_pack, &options)?;
     Ok(buf)

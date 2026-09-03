@@ -19,8 +19,14 @@
 //! Status: Wave 0. Read path (GNRL + DX10, both codecs) and the GNRL write
 //! path (with real compression, fixing the reference's uncompressed-only
 //! writer) are implemented and unit-tested against synthetic fixtures,
-//! including a full write-then-read round trip. A DX10 (texture-chunk)
-//! writer and gating against real-world BA2 fixtures are tracked as
+//! including a full write-then-read round trip, plus cross-validation
+//! against an independent oracle implementation (`ba2` crate, dev-only
+//! dependency; see `tests/oracle_cross_validation.rs`) for v1/v2/v3 GNRL.
+//! That cross-validation surfaced and fixed a real structural bug: v2/v3
+//! (Starfield) archives have a header extension beyond the base 24 bytes,
+//! and v3's codec is a genuine per-archive `compression_method` field
+//! (not implied by version number) -- see `format::header_size_for_version`
+//! for the full writeup. A DX10 (texture-chunk) writer is tracked as
 //! follow-up work (see `docs/SCHEDULE.md`, Wave 0).
 
 pub mod error;
