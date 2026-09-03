@@ -1,13 +1,12 @@
 # MGE — ModFather Game Environment
 
-State container for enabled MODs, last click (Active), and the VCS extract tree.
+State container for:
 
-```
-download-repo/<MOD>/          # unextracted pulls
-VCS/mods/<MOD>/<archive>/     # extract
-VCS/mods/<MOD>/loose/         # mandatory loose only
-```
+- lock slider per MOD (explicit inclusion) and order
+- last click (Active only if Unlocked)
+- extracted contents of included MODs
+- conflict overlay (player pick, else automatic bash of plugins and loose assets)
 
-Component settings live on the MOD. The MGE reads enabled MODs.
+The slider includes the MOD in this MGE. MOD settings choose that MOD's content.
 
-Cross-MOD conflicts: last-file-served or player pick. That overlay does not replace per-MOD `loose/`.
+New MGE: every viable downloaded MOD starts Locked. Switch MGE without restart. Version-controlled. Themeable.
