@@ -239,6 +239,20 @@ fn decode_zlib(body: &[u8], original_size: usize) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// v105 (Skyrim SE/AE) BSA payloads use the **LZ4 frame format**, not raw
+/// LZ4 blocks. This was confirmed against an independently-written oracle
+/// (the `ba2` crate's `tes4::File` codec, which uses `lzzzz::lz4f`) and a
+/// second, independent real-game-verified source (ByroRedux's BSA reader
+/// notes, which explicitly document "v105: LZ4 frame format" as confirmed
+/// against actual Skyrim SE archives). An earlier revision of this reader
+/// used `lz4_flex::block::decompress` (raw block, no frame header/checksum)
+/// which would silently fail or produce garbage against real v105 BSAs.
 fn decode_lz4(body: &[u8], original_size: usize) -> Result<Vec<u8>> {
-    lz4_flex::block::decompress(body, original_size).map_err(|e| Error::Lz4(e.to_string()))
+    use lz4_flex::frame::FrameDecoder;
+    use std::io::Read as _;
+    let mut dec = FrameDecoder::new(body);
+    let mut out = Vec::with_capacity(original_size);
+    dec.read_to_end(&mut out)
+        .map_err(|e| Error::Lz4(e.to_string()))?;
+    Ok(out)
 }

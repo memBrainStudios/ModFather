@@ -103,8 +103,18 @@ fn v104_zlib_payload_decodes() {
 
 #[test]
 fn v105_lz4_payload_decodes() {
+    // v105 (Skyrim SE/AE) uses the LZ4 **frame** format, not raw LZ4 blocks
+    // -- confirmed against an independent oracle (see
+    // `src/reader.rs::decode_lz4`'s doc comment for the cross-check
+    // details). This fixture must therefore be built with `FrameEncoder`,
+    // matching what the reader now expects.
     let plain = b"Hello from a v105 (Skyrim SE/AE, LZ4) BSA entry, repeated. ".repeat(10);
-    let compressed = lz4_flex::block::compress(&plain);
+    let compressed = {
+        use lz4_flex::frame::FrameEncoder;
+        let mut enc = FrameEncoder::new(Vec::new());
+        enc.write_all(&plain).unwrap();
+        enc.finish().unwrap()
+    };
 
     let mut on_disk = Vec::new();
     on_disk.extend_from_slice(&(plain.len() as u32).to_le_bytes());
@@ -119,11 +129,16 @@ fn v105_lz4_payload_decodes() {
 
 #[test]
 fn v105_lz4_payload_would_fail_as_zlib() {
-    // This is the exact regression the reference implementation had: it
-    // used `ZlibDecoder` unconditionally, which either errors out or (worse)
-    // silently produces wrong bytes on a real v105 (LZ4) archive.
+    // This is the exact regression class the reference implementation had:
+    // it used `ZlibDecoder` unconditionally, which either errors out or
+    // (worse) silently produces wrong bytes on a real v105 (LZ4) archive.
     let plain = b"regression guard content".repeat(20);
-    let compressed = lz4_flex::block::compress(&plain);
+    let compressed = {
+        use lz4_flex::frame::FrameEncoder;
+        let mut enc = FrameEncoder::new(Vec::new());
+        enc.write_all(&plain).unwrap();
+        enc.finish().unwrap()
+    };
 
     use std::io::Read;
     let mut bad = flate2::read::ZlibDecoder::new(&compressed[..]);

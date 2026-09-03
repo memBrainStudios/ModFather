@@ -85,11 +85,21 @@ fn normalize_name(name: &str) -> String {
     name.to_lowercase()
 }
 
+/// v105 (Skyrim SE/AE) uses the **LZ4 frame format** (confirmed against an
+/// independent oracle -- see the matching note on `reader::decode_lz4` --
+/// not raw LZ4 blocks). Writing raw blocks here would produce archives the
+/// real game (and any other LZ4-frame-expecting reader, including this
+/// crate's own reader before this fix) cannot decompress.
 fn compress_payload(version: u32, data: &[u8]) -> Result<Vec<u8>> {
     let mut out = Vec::with_capacity(data.len() + 4);
     out.extend_from_slice(&(data.len() as u32).to_le_bytes());
     if version >= 105 {
-        out.extend_from_slice(&lz4_flex::block::compress(data));
+        use lz4_flex::frame::FrameEncoder;
+        let mut enc = FrameEncoder::new(Vec::new());
+        enc.write_all(data)
+            .map_err(|e| Error::Lz4(e.to_string()))?;
+        let body = enc.finish().map_err(|e| Error::Lz4(e.to_string()))?;
+        out.extend_from_slice(&body);
     } else {
         use flate2::write::ZlibEncoder;
         let mut enc = ZlibEncoder::new(Vec::new(), flate2::Compression::default());
