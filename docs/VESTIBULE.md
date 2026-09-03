@@ -11,17 +11,12 @@ Official 7-Zip reference only: [memBrainStudios/7zip](https://github.com/memBrai
 
 ## MOD
 
-A MOD is a state container:
+State container: component settings + references to installed archives.
 
-- settings for that MOD's active components
-- references to installed archives (hashes, not bytes)
+## Enablement vs Active
 
-Per-MGE enablement: Off / On / Active. No compressed MOD package.
+- **Enabled** — this MGE uses the MOD. Settings come from the MOD.
+- **Active** — last MOD the user clicked. Open FOMOD view.
+- **Inactive** — every other MOD. Closed row (name or image).
 
-## MGE
-
-A MGE is a state container:
-
-- settings for active MODs
-- their extracted contents
-- `loose/` = conflict winners only (last-file-served or player pick)
+Active is not enablement.
