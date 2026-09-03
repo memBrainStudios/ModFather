@@ -13,6 +13,8 @@ Official 7-Zip reference only: [memBrainStudios/7zip](https://github.com/memBrai
 
 If a dependency is in the store, request enable. If it is not, pull from the host.
 
+A **collection** is that walk, batched. Multiple collections may run in one session. Same download repo, VCS, enablement, and conflict overlay.
+
 ## Pull
 
 1. Write files to `download-repo/<MOD name>/`. Do not extract there.
