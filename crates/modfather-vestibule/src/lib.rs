@@ -20,7 +20,16 @@
 //! stub (masterlist + Nexus categories + user rules) named in
 //! `docs/VESTIBULE.md`. Real pull-pipeline wiring (`download-repo` ->
 //! `VCS`) is tracked as follow-up work.
+//!
+//! [`packing::pack_ba2_stem`] packs Textures BA2 archives as real DX10
+//! (not GNRL) using [`dds`]'s minimal DDS-header parser plus
+//! `modfather_ba2::write_dx10` -- closing the gap this module's doc
+//! comment used to flag ("packs *both* the Main and Textures BA2 as
+//! GNRL"). `dds` is deliberately not a full DDS/DXGI implementation
+//! (see its own module doc comment); real texture-format work belongs to
+//! `docs/CRUCIBLE.md`'s dedicated DDS job, not here.
 
+pub mod dds;
 pub mod layering;
 pub mod loot;
 pub mod packing;

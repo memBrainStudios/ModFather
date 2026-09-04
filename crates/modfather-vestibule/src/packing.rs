@@ -7,16 +7,17 @@
 //! This module owns the *split decision* (which loose files are "texture"
 //! files vs. everything else) and the resulting archive naming; the actual
 //! container bytes are produced by [`modfather_bsa::write`] /
-//! [`modfather_ba2::write`].
+//! [`modfather_ba2::write`] (Main) and [`modfather_ba2::write_dx10`]
+//! (BA2 Textures).
 //!
-//! **Known limitation, flagged rather than silently assumed complete:**
-//! real Bethesda "Textures" BA2 archives use the DX10 (chunked,
-//! streaming-mip) sub-format, whose writer is not yet implemented in
-//! `modfather-ba2` (see that crate's `writer` module doc comment). This
-//! module's [`pack_ba2_stem`] therefore packs *both* the Main and Textures
-//! BA2 as GNRL — correct naming and a valid, self-consistent archive that
-//! this crate's own reader round-trips, but not yet a spec-perfect DX10
-//! Textures archive for the real game. That is tracked as follow-up work.
+//! BA2 Textures archives are packed as real DX10 (not GNRL): each `.dds`
+//! loose file's header is parsed by [`crate::dds`] (a minimal, non-pixel
+//! DDS-metadata parser -- see that module's doc comment for its scope)
+//! into a `modfather_ba2::TextureToPack`, which `write_dx10` packs as one
+//! full-mip-range chunk per texture (Wave-0 scope; see that function's
+//! doc comment in `modfather-ba2`). BSA Textures archives have no such
+//! sub-format distinction -- BSA is a flat container regardless of file
+//! type -- so [`pack_bsa_stem`] needs no equivalent DDS-aware step.
 
 use std::collections::BTreeMap;
 
@@ -110,10 +111,16 @@ fn pack_bsa_group(
 
 /// Pack `files` into BA2 archives named per Bethesda doctrine for `stem`.
 /// Returns a map from archive file name to archive bytes. The Main archive
-/// (`{stem} - Main.ba2`) is always present; the Textures archive
-/// (`{stem} - Textures.ba2`) is present only if `files` contains at least
-/// one `.dds` entry (see this module's doc comment for the GNRL-only
-/// caveat on the Textures archive).
+/// (`{stem} - Main.ba2`) is always GNRL and always present; the Textures
+/// archive (`{stem} - Textures.ba2`) is real DX10 (see this module's doc
+/// comment) and is present only if `files` contains at least one `.dds`
+/// entry.
+///
+/// # Errors
+/// Returns [`modfather_ba2::Error::Malformed`] if any `.dds` texture file
+/// fails to parse (bad/missing DDS magic, truncated header, or an
+/// unrecognized legacy FourCC with no `DX10` extended header -- see
+/// [`crate::dds::parse`]).
 pub fn pack_ba2_stem(
     stem: &str,
     files: &[LooseFile],
@@ -127,7 +134,7 @@ pub fn pack_ba2_stem(
     out.insert(format!("{stem} - Main.ba2"), main_bytes);
 
     if !textures.is_empty() {
-        let tex_bytes = pack_ba2_group(&textures, version, compress)?;
+        let tex_bytes = pack_ba2_textures_group(&textures, version, compress)?;
         out.insert(format!("{stem} - Textures.ba2"), tex_bytes);
     }
 
@@ -157,6 +164,36 @@ fn pack_ba2_group(
     Ok(buf)
 }
 
+/// Pack `.dds` files into a real DX10 BA2 archive, per this module's doc
+/// comment. Each file's DDS header is parsed by [`crate::dds`] to fill in
+/// `F4TexInfo`'s metadata fields.
+fn pack_ba2_textures_group(
+    files: &[&LooseFile],
+    version: u32,
+    compress: bool,
+) -> modfather_ba2::Result<Vec<u8>> {
+    let to_pack: Vec<modfather_ba2::TextureToPack> = files
+        .iter()
+        .map(|f| {
+            crate::dds::to_texture_to_pack(f).map_err(|e| {
+                modfather_ba2::Error::Malformed(format!(
+                    "failed to parse DDS header for {:?}: {e}",
+                    f.path
+                ))
+            })
+        })
+        .collect::<modfather_ba2::Result<Vec<_>>>()?;
+
+    let options = modfather_ba2::WriteOptions {
+        version,
+        compress,
+        force_lz4_v3: false,
+    };
+    let mut buf = Vec::new();
+    modfather_ba2::write_dx10(std::io::Cursor::new(&mut buf), &to_pack, &options)?;
+    Ok(buf)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,6 +203,21 @@ mod tests {
             path: path.to_string(),
             data: data.to_vec(),
         }
+    }
+
+    /// Build a minimal legal legacy-FourCC (`DXT5`) `.dds` file wrapping
+    /// `mip_data`, for tests that need a `.dds` loose file that will
+    /// actually pass [`crate::dds::parse`] -- see that module's own unit
+    /// tests for the full header-field layout this mirrors.
+    fn fake_dds(mip_data: &[u8]) -> Vec<u8> {
+        let mut buf = vec![0u8; 128];
+        buf[0..4].copy_from_slice(b"DDS ");
+        buf[12..16].copy_from_slice(&64u32.to_le_bytes()); // height
+        buf[16..20].copy_from_slice(&64u32.to_le_bytes()); // width
+        buf[28..32].copy_from_slice(&1u32.to_le_bytes()); // mip map count
+        buf[84..88].copy_from_slice(b"DXT5");
+        buf.extend_from_slice(mip_data);
+        buf
     }
 
     #[test]
@@ -217,7 +269,7 @@ mod tests {
             ),
             loose(
                 "Textures\\Foo_d.dds",
-                b"dds bytes repeated for compressibility ".repeat(10).as_slice(),
+                &fake_dds(b"dds mip bytes repeated for compressibility ".repeat(10).as_slice()),
             ),
         ];
         let archives = pack_ba2_stem("MyMod", &files, 1, true).unwrap();
@@ -267,15 +319,13 @@ mod tests {
 
     #[test]
     fn packed_ba2_archives_round_trip_through_the_reader() {
+        let tex_mip_data = b"dds mip bytes repeated for compressibility ".repeat(10);
         let files = vec![
             loose(
                 "Interface\\HUDMenu.swf",
                 b"swf bytes repeated for compressibility ".repeat(10).as_slice(),
             ),
-            loose(
-                "Textures\\Foo_d.dds",
-                b"dds bytes repeated for compressibility ".repeat(10).as_slice(),
-            ),
+            loose("Textures\\Foo_d.dds", &fake_dds(&tex_mip_data)),
         ];
         let archives = pack_ba2_stem("MyMod", &files, 1, true).unwrap();
 
@@ -285,10 +335,24 @@ mod tests {
         assert_eq!(main_archive.entries().len(), 1);
         assert_eq!(main_archive.read_file(0).unwrap(), files[0].data);
 
+        // The Textures BA2 is real DX10 now (see this module's doc
+        // comment): its single entry is a `Texture`, not a `General`,
+        // and its bytes are read back via `read_chunk` (chunk 0, the
+        // one full-mip-range chunk `write_dx10` emits) -- and are the
+        // *stripped* mip bytes, not the original `.dds` file bytes
+        // (the DDS header parsed off by `dds::to_texture_to_pack` is
+        // never packed into the archive; see `crate::dds`'s doc comment).
         let tex_bytes = archives.get("MyMod - Textures.ba2").unwrap().clone();
         let mut tex_archive =
             modfather_ba2::Ba2Archive::open(std::io::Cursor::new(tex_bytes)).unwrap();
         assert_eq!(tex_archive.entries().len(), 1);
-        assert_eq!(tex_archive.read_file(0).unwrap(), files[1].data);
+        match &tex_archive.entries()[0].kind {
+            modfather_ba2::EntryKind::Texture { height, width, .. } => {
+                assert_eq!(*height, 64);
+                assert_eq!(*width, 64);
+            }
+            modfather_ba2::EntryKind::General { .. } => panic!("expected a DX10 Texture entry"),
+        }
+        assert_eq!(tex_archive.read_chunk(0, 0).unwrap(), tex_mip_data);
     }
 }

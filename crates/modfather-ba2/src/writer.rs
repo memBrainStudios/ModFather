@@ -15,17 +15,35 @@
 //! notes). v2 gets 8 reserved zero bytes; v3 gets 8 reserved zero bytes
 //! plus a real `compression_method: u32` field.
 //!
-//! DX10 (texture-chunk) packing is out of scope for this writer: BA2
-//! "Main" archives (which this writer targets, per `docs/VESTIBULE.md`'s
-//! `{stem} - Main.ba2` naming) are GNRL; DX10 (`{stem} - Textures.ba2`) is
-//! a separate, more involved packer (chunked streaming mips) tracked as
-//! follow-up work. Real v3 archives are DX10 by convention, but this
-//! writer still emits a structurally-correct v3 *GNRL* header extension
-//! if a caller passes `version: 3`, since nothing in the format forbids
-//! it and it keeps the reader/writer symmetric for testing.
+//! DX10 (texture-chunk) packing: [`write_dx10`] below. Wave 0 scope --
+//! emits exactly **one** chunk per texture, spanning the whole mip range
+//! (`start_mip = 0`, `end_mip = num_mips - 1`). Real Archive2 output may
+//! split a large texture's mips across up to 4 independently streamable
+//! chunks (per NifTools' `F4TexInfo`/`F4TexChunk` notes and the `ba2`
+//! crate's own `make_chunks`, which packs up to 4); multi-chunk streaming
+//! packing is tracked as further follow-up work once it is actually
+//! needed, since a single full-range chunk is a structurally valid DX10
+//! file that this crate's own [`crate::reader::Ba2Archive::read_chunk`]
+//! round-trips correctly (chunk count is a real per-file field, not
+//! assumed to be 1 by the reader).
+//!
+//! **Scope boundary, deliberately not crossed here:** this writer takes
+//! texture metadata (`height`/`width`/`num_mips`/`format`) as caller-
+//! supplied fields on [`TextureToPack`], not by parsing a raw `.dds`
+//! file itself. Real DDS files encode that metadata in a 128-byte (or
+//! 148-byte, when a `DX10` FourCC extension header is present) header
+//! that this crate deliberately does not parse: DDS is a texture *file*
+//! format (Microsoft's public spec), not part of BA2's own container
+//! layout, which is this crate's sole concern per its module doc comment
+//! (`docs/CRUCIBLE.md` already carves out a dedicated "DDS view/convert/
+//! mip job" as the intended home for that parsing). Real v3 archives are
+//! DX10 by convention, but [`write`] (GNRL) still emits a structurally-
+//! correct v3 *GNRL* header extension if a caller passes `version: 3`,
+//! since nothing in the format forbids it and it keeps the reader/writer
+//! symmetric for testing.
 
 use crate::error::{Error, Result};
-use crate::format::{self, version, MAGIC, TYPE_GNRL};
+use crate::format::{self, version, MAGIC, TYPE_DX10, TYPE_GNRL};
 use crate::hash;
 use std::io::{Seek, SeekFrom, Write};
 
@@ -37,6 +55,28 @@ use std::io::{Seek, SeekFrom, Write};
 pub struct FileToPack {
     pub name: String,
     pub data: Vec<u8>,
+}
+
+/// One texture to pack into a DX10 (`TYPE_DX10`) BA2 archive.
+/// `name` follows the same normalization rule as [`FileToPack::name`].
+/// `data` is the already-decoded texture payload -- the raw mip bytes
+/// that belong in the single full-mip-range chunk this writer emits (see
+/// the module doc comment's Wave-0 single-chunk scope note), **not** a
+/// raw `.dds` file with its own header still attached; `height`/`width`/
+/// `num_mips`/`format` are the caller-supplied `F4TexInfo` fields this
+/// writer cannot derive on its own without parsing DDS (out of scope
+/// here -- see the module doc comment).
+#[derive(Debug, Clone)]
+pub struct TextureToPack {
+    pub name: String,
+    pub data: Vec<u8>,
+    pub height: u16,
+    pub width: u16,
+    pub num_mips: u8,
+    /// `DXGI_FORMAT` value (e.g. 71 = `BC1_UNORM`, 77 = `BC3_UNORM`, 98 =
+    /// `BC7_UNORM`); stored verbatim in `F4TexInfo::format`, never
+    /// interpreted by this crate.
+    pub format: u8,
 }
 
 /// Writer-level policy.
@@ -222,6 +262,129 @@ pub fn write<W: Write + Seek>(
     write_u64_le(&mut writer, name_table_offset)?;
 
     for i in 0..files.len() {
+        writer.seek(SeekFrom::Start(offset_patch_positions[i]))?;
+        write_u64_le(&mut writer, offsets[i])?;
+        writer.seek(SeekFrom::Start(packed_size_patch_positions[i]))?;
+        write_u32_le(&mut writer, packed_sizes[i])?;
+        write_u32_le(&mut writer, unpacked_sizes[i])?;
+    }
+
+    Ok(())
+}
+
+/// Pack `textures` into a DX10 BA2 archive and write it to `writer`.
+/// Produces exactly the `F4TexInfo`(24 bytes) + one `F4TexChunk`(24
+/// bytes) per-file layout `reader::Ba2Archive::read_dx10_entries` already
+/// parses -- see the module doc comment's Wave-0 single-chunk scope note
+/// for why this writer never emits more than one chunk per texture.
+pub fn write_dx10<W: Write + Seek>(
+    mut writer: W,
+    textures: &[TextureToPack],
+    options: &WriteOptions,
+) -> Result<()> {
+    let codec = if options.version == version::V3 {
+        if options.force_lz4_v3 {
+            format::PayloadCodec::Lz4
+        } else {
+            format::PayloadCodec::Zlib
+        }
+    } else {
+        format::default_codec_for_version(options.version)
+    };
+    let num_files = textures.len() as u32;
+
+    let normalized: Vec<String> = textures
+        .iter()
+        .map(|f| f.name.replace('/', "\\").to_lowercase())
+        .collect();
+
+    // ---- Header (24 bytes, plus a version-dependent extension) ----
+    writer.write_all(&MAGIC)?;
+    write_u32_le(&mut writer, options.version)?;
+    writer.write_all(&TYPE_DX10)?;
+    write_u32_le(&mut writer, num_files)?;
+    let name_table_offset_pos = current_pos(&mut writer)?;
+    write_u64_le(&mut writer, 0)?; // nameTableOffset placeholder
+
+    // Starfield (v2/v3) header extension -- same rationale as `write`
+    // (GNRL) above; see the module-level doc comment on that function
+    // and `format::header_size_for_version`.
+    if options.version == version::V2 {
+        write_u64_le(&mut writer, 0)?; // 8 reserved bytes, no known meaning
+    } else if options.version == version::V3 {
+        write_u64_le(&mut writer, 0)?; // 8 reserved bytes
+        write_u32_le(&mut writer, compression_method_field(codec))?;
+    }
+
+    // ---- F4TexInfo records (24 bytes each) + one F4TexChunk (24 bytes)
+    // per file, placeholders for the chunk's offset/packedSize/
+    // unpackedSize patched after payloads are written ----
+    let mut offset_patch_positions = Vec::with_capacity(textures.len());
+    let mut packed_size_patch_positions = Vec::with_capacity(textures.len());
+    for (name, tex) in normalized.iter().zip(textures) {
+        let h = hash::hash_path(name);
+        write_u32_le(&mut writer, h.file)?;
+        writer.write_all(&ext_field(name))?;
+        write_u32_le(&mut writer, h.directory)?;
+        // unk0C(u8)=0, numChunks(u8)=1 (see the module doc comment's
+        // single-chunk scope note), chunkHeaderSize(u16)=0x18 (24 bytes,
+        // matching `format::DX10_CHUNK_SIZE`; confirmed against the same
+        // NifTools `F4TexChunk` reference `format.rs` cites).
+        writer.write_all(&[0u8, 1u8])?;
+        write_u16_le(&mut writer, format::DX10_CHUNK_SIZE as u16)?;
+        write_u16_le(&mut writer, tex.height)?;
+        write_u16_le(&mut writer, tex.width)?;
+        writer.write_all(&[tex.num_mips, tex.format])?;
+        write_u16_le(&mut writer, 0)?; // unk16, no known meaning
+
+        // ---- F4TexChunk (24 bytes): the single full-mip-range chunk ----
+        offset_patch_positions.push(current_pos(&mut writer)?);
+        write_u64_le(&mut writer, 0)?; // offset placeholder
+        packed_size_patch_positions.push(current_pos(&mut writer)?);
+        write_u32_le(&mut writer, 0)?; // packedSize placeholder
+        write_u32_le(&mut writer, 0)?; // unpackedSize placeholder, patched below too
+        let end_mip = tex.num_mips.saturating_sub(1) as u16;
+        write_u16_le(&mut writer, 0)?; // startMip
+        write_u16_le(&mut writer, end_mip)?; // endMip
+        write_u32_le(&mut writer, format::SENTINEL)?;
+    }
+
+    // ---- Payloads (one per texture, per its single chunk) ----
+    let mut offsets = Vec::with_capacity(textures.len());
+    let mut packed_sizes = Vec::with_capacity(textures.len());
+    let mut unpacked_sizes = Vec::with_capacity(textures.len());
+    for tex in textures {
+        let data_offset = current_pos(&mut writer)?;
+        offsets.push(data_offset);
+        unpacked_sizes.push(tex.data.len() as u32);
+
+        if options.compress {
+            let packed = compress_payload(codec, &tex.data)?;
+            packed_sizes.push(packed.len() as u32);
+            writer.write_all(&packed)?;
+        } else {
+            packed_sizes.push(0u32); // packedSize == 0 means uncompressed
+            writer.write_all(&tex.data)?;
+        }
+    }
+
+    // ---- Name table ----
+    let name_table_offset = current_pos(&mut writer)?;
+    for name in &normalized {
+        if name.len() > u16::MAX as usize {
+            return Err(Error::Malformed(format!(
+                "file name too long for BA2 name table: {name:?}"
+            )));
+        }
+        write_u16_le(&mut writer, name.len() as u16)?;
+        writer.write_all(name.as_bytes())?;
+    }
+
+    // ---- Patch pass ----
+    writer.seek(SeekFrom::Start(name_table_offset_pos))?;
+    write_u64_le(&mut writer, name_table_offset)?;
+
+    for i in 0..textures.len() {
         writer.seek(SeekFrom::Start(offset_patch_positions[i]))?;
         write_u64_le(&mut writer, offsets[i])?;
         writer.seek(SeekFrom::Start(packed_size_patch_positions[i]))?;
