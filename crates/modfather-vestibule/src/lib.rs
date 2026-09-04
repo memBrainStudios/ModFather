@@ -16,11 +16,13 @@
 //! archive-naming split from `docs/VESTIBULE.md`'s Pull step 3
 //! (`{stem}.bsa`/`{stem} - Textures.bsa`, `{stem} - Main.ba2`/
 //! `{stem} - Textures.ba2`) on top of `modfather-bsa`'s and
-//! `modfather-ba2`'s writers. LOOT (the generalized sorter) and real
-//! pull-pipeline wiring (`download-repo` -> `VCS`) are tracked as
-//! follow-up work.
+//! `modfather-ba2`'s writers. [`loot`] implements the generalized-sorter
+//! stub (masterlist + Nexus categories + user rules) named in
+//! `docs/VESTIBULE.md`. Real pull-pipeline wiring (`download-repo` ->
+//! `VCS`) is tracked as follow-up work.
 
 pub mod layering;
+pub mod loot;
 pub mod packing;
 pub mod vfs;
 
