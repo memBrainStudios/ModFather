@@ -14,6 +14,15 @@ Official 7-Zip reference only: [memBrainStudios/7zip](https://github.com/memBrai
 - **Standalone package** (`sevenzip-re`) — a complete, independent Rust implementation of the 7z container and its core codecs (Copy, LZMA, LZMA2; more filters later). No Bethesda-specific code, no game dependency. It is redistributable on its own. RAR stays a placeholder pending license and ships in neither deliverable until then.
 - **Bethesda archive extension** (separate crate(s), e.g. `modfather-bsa`, `modfather-ba2`) — BSA (v103–105) and BA2 (GNRL/DX10) are Bethesda's own container formats, not 7z. They plug into 7-Zip RE's container registry as additional handlers, equal in standing to 7z, but they are **not bundled into the standalone package**. Vestibule depends on the standalone package plus these extension crates; a consumer who only wants general-purpose 7z support does not have to pull in Bethesda format code.
 
+### The container registry, concretely
+
+"Plug into 7-Zip RE's container registry as additional handlers" is a real mechanism, not just this paragraph's prose: `sevenzip-re` ships a GoF Strategy + Factory pair in `sevenzip_re::container` --
+
+- `ContainerFormat` / `ContainerHandle` — the Strategy interface every format implements once (probe magic bytes, open, list entries, read an entry by index).
+- `Registry` — the Factory: holds every registered `ContainerFormat`, peeks a stream's header bytes, and dispatches `Registry::open` to whichever format's `probe` matches.
+
+`sevenzip-re` ships this mechanism **empty** plus its own `SevenZipFormat`/`SevenZipHandle` payload for 7z; it never registers BSA/BA2 itself, since that would mean the standalone package depending on Bethesda-specific crates, inverting the one-way custody chain. Each extension crate instead implements the same trait pair for its own archive type (`modfather_bsa::container::BsaFormat`, `modfather_ba2::container::Ba2Format`), and `modfather-vestibule::container::build_registry` is where all three are assembled into the one shared `Registry` actually used by Vestibule and anything downstream of it -- Vestibule is the first crate in the chain that already depends on every format extension, so it is the only correct place to do this without inverting that dependency direction. A future RAR crate (once licensed) slots in the same way: implement the trait pair, add one line to `build_registry`, and every existing caller of `Registry::open` picks it up with no other code changes.
+
 ## Lock slider
 
 Two-position control on the MGE. Unlocked = this MOD is explicitly included in the MGE. Locked = not included. Not compression. New MGE: viable MODs start Locked.

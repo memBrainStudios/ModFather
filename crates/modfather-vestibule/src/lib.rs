@@ -28,7 +28,16 @@
 //! GNRL"). `dds` is deliberately not a full DDS/DXGI implementation
 //! (see its own module doc comment); real texture-format work belongs to
 //! `docs/CRUCIBLE.md`'s dedicated DDS job, not here.
+//!
+//! [`container::build_registry`] assembles the shared
+//! `sevenzip_re::container::Registry` (a GoF Strategy + Factory
+//! "modular payload" per format, magic-byte-dispatched) with 7z, BSA, and
+//! BA2 all registered -- this is the crate that owns doing so, since it
+//! is the first one in the custody chain that already depends on every
+//! format extension. See that module's doc comment for the full
+//! rationale and why a future RAR format registers the same way.
 
+pub mod container;
 pub mod dds;
 pub mod layering;
 pub mod loot;

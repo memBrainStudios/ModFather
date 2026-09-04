@@ -34,6 +34,7 @@
 //! structurally valid DX10 archive and what multi-chunk streaming would
 //! add on top.
 
+pub mod container;
 pub mod error;
 pub mod format;
 pub mod hash;

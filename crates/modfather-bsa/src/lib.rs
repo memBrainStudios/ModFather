@@ -11,8 +11,10 @@
 //!   used `ZlibDecoder` unconditionally regardless of version, which is
 //!   simply wrong for v105 (Skyrim SE/AE) archives.
 //! - TES3 (Morrowind) BSA is a different, older format and is intentionally
-//!   out of scope here (see `docs/SCHEDULE.md`); this crate only claims
-//!   v103-105 (Gamebryo/Creation-engine BSA).
+//!   out of scope here for now, pending a scope decision (see
+//!   `docs/SCHEDULE.md`'s Wave 0 "TES3 (Morrowind) BSA scope" note for the
+//!   two options and why it does not gate Wave 0 either way); this crate
+//!   only claims v103-105 (Gamebryo/Creation-engine BSA).
 //!
 //! Status: Wave 0. Read path (v103-105, version-aware zlib/LZ4) and write
 //! path (spec-conforming hash-sorted pack, matching the reader's codec
@@ -21,6 +23,7 @@
 //! fixture gating (against an actual game BSA) is tracked as follow-up
 //! work.
 
+pub mod container;
 pub mod error;
 pub mod format;
 pub mod hash;

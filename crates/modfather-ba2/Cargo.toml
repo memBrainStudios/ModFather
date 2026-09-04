@@ -15,6 +15,12 @@ thiserror = "1.0"
 
 [dev-dependencies]
 tempfile = "3"
+# Dev-only: cross-format registry test (confirms the shared
+# `sevenzip_re::container::Registry` dispatches a BA2 archive to
+# `Ba2Format` and a BSA archive to `modfather_bsa::container::BsaFormat`
+# in the same registry, without either crate depending on the other at
+# runtime). Never a runtime dependency of this crate.
+modfather-bsa = { path = "../modfather-bsa" }
 # Dev-only cross-validation oracle: an independently-written, 0BSD-licensed
 # BSA/BA2 crate used ONLY in tests to confirm our writer/reader agree with a
 # separate implementation of the same public spec. Never a runtime

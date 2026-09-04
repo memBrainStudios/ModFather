@@ -12,13 +12,18 @@
 //!
 //! It contains **zero Bethesda-specific code**. BSA and BA2 are Bethesda's
 //! own archive formats, not 7z; they live in separate extension crates
-//! (`modfather-bsa`, `modfather-ba2`) that register additional container
-//! handlers on top of this crate rather than being folded into it.
+//! (`modfather-bsa`, `modfather-ba2`) that register as additional
+//! [`container::ContainerFormat`] handlers alongside 7z (see the
+//! [`container`] module) rather than being folded into this crate.
 //!
 //! RAR is a placeholder pending a license and is not implemented here.
+//! When a license is secured, RAR slots into the same [`container`]
+//! registry mechanism as one more [`container::ContainerFormat`] --
+//! nothing about this crate's public API needs to change for that.
 
 pub mod archive;
 pub mod codec;
+pub mod container;
 pub mod error;
 pub mod format;
 pub mod header;
@@ -26,4 +31,5 @@ pub mod varint;
 
 pub use archive::{create, Archive, Entry, NewEntry};
 pub use codec::PackCodec;
+pub use container::{ContainerEntry, ContainerError, ContainerFormat, ContainerHandle, ContainerResult, Registry};
 pub use error::{Error, Result};

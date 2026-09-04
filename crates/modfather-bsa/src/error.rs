@@ -19,7 +19,8 @@ pub enum Error {
     /// Fallout 4 pre-Next-Gen), and v105 (Skyrim SE/AE) are implemented.
     /// TES3 (Morrowind) BSA is a materially different, older format and is
     /// explicitly out of scope until the user decides otherwise (see
-    /// `docs/SCHEDULE.md`).
+    /// `docs/SCHEDULE.md`'s Wave 0 "TES3 (Morrowind) BSA scope" note for
+    /// the two options awaiting that decision).
     #[error("unsupported BSA version: {0}")]
     UnsupportedVersion(u32),
 
