@@ -117,15 +117,27 @@ fn encode_lzma2(data: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
     let mut body = Vec::new();
     lzma_rs::lzma2_compress(&mut input, &mut body).map_err(Error::Io)?;
 
-    // LZMA2's 7z coder property is a single byte encoding the dictionary
-    // size as `(2 | (bits & 1)) << (bits / 2 + 11)`... but the pure-Rust
-    // encoder doesn't expose the dict size it chose. We conservatively
-    // advertise the largest standard size (64 MiB, prop byte 0x28); any
-    // compliant LZMA2 decoder sizes its window from the chunk headers
-    // themselves during actual decompression, so this value only matters to
-    // *other* tools reading properties before decoding, not to this crate's
-    // own [`decode_lzma2`].
-    let properties = vec![0x28u8];
+    // LZMA2's 7z coder property is a single byte `p` encoding the
+    // dictionary size as `(2 | (p & 1)) << (p / 2 + 11)` for `p` in
+    // 0..=39, with `p == 40` a special sentinel meaning "unbounded" (the
+    // decoder must size its window from the stream itself, no cap at
+    // all) -- a legal value per the LZMA2 spec, but one real-world tools
+    // interpret as "allocate up to 4 GiB up front", which is why 7-Zip
+    // itself refuses it with "Can't allocate required memory!" for any
+    // ordinary-sized archive. The pure-Rust encoder doesn't expose the
+    // dict size it actually chose, so we conservatively advertise the
+    // largest *standard* (non-sentinel) size instead: 64 MiB is `p == 28`
+    // **in decimal**, not `0x28` (which is decimal 40 -- the unbounded
+    // sentinel above, and the actual value of a bug this literal used to
+    // contain: `0x28u8` silently meant "unbounded", triggering that same
+    // 4 GiB allocation failure in the real `7z` binary and only caught by
+    // `our_writer_is_readable_by_the_system_binary` cross-checking our
+    // writer's LZMA2 output against it). Any compliant LZMA2 decoder
+    // sizes its actual window from the chunk headers during decompression
+    // regardless, so this value only matters to *other* tools reading
+    // properties before decoding, not to this crate's own
+    // [`decode_lzma2`].
+    let properties = vec![28u8];
     Ok((body, properties))
 }
 

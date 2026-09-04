@@ -118,6 +118,90 @@ fn read_real_7z_fixture_created_by_system_binary() {
     assert_eq!(b, b"fixture file B, a bit longer than A");
 }
 
+/// The other direction of the same cross-check: an archive **we** create
+/// must be readable by the real system `7z` binary, not just by our own
+/// reader. This closes the one-way gap `docs/SCHEDULE.md`'s Wave 0 gate
+/// note flags for `read_real_7z_fixture_created_by_system_binary` above
+/// ("external `7z` writes, our reader reads; no packing-side real-archive
+/// fixture yet"). As with that test, the system binary is used only as an
+/// independent **verifier** here (`7z t` integrity test, then `7z x`
+/// extract-and-byte-compare) — `sevenzip-re`'s own `create()` never shells
+/// out to it.
+#[test]
+fn our_writer_is_readable_by_the_system_binary() {
+    let seven_zip = which_7z();
+    let Some(seven_zip) = seven_zip else {
+        eprintln!("skipping: no system 7z/7za binary found for verification");
+        return;
+    };
+
+    for codec in [PackCodec::Copy, PackCodec::Lzma, PackCodec::Lzma2] {
+        let dir = tempfile::tempdir().unwrap();
+        let archive_path = dir.path().join("ours.7z");
+
+        // A payload with enough internal repetition that LZMA/LZMA2 both
+        // produce a genuinely compressed (not larger-than-input) stream,
+        // exercising the real codec path rather than a degenerate
+        // near-empty case.
+        let payload: Vec<u8> = b"ModFather 7-Zip RE writer cross-check payload. "
+            .iter()
+            .cycle()
+            .take(4096)
+            .copied()
+            .collect();
+
+        let entries = vec![
+            NewEntry {
+                name: "top.txt".to_string(),
+                data: b"top-level entry".to_vec(),
+            },
+            NewEntry {
+                name: "nested/deep.bin".to_string(),
+                data: payload.clone(),
+            },
+        ];
+        create(&archive_path, &entries, codec).unwrap();
+
+        // 1. `7z t`: full integrity test (CRCs, header parsing) by an
+        //    entirely independent implementation of the format.
+        let test_status = std::process::Command::new(&seven_zip)
+            .arg("t")
+            .arg(&archive_path)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .expect("failed to spawn system 7z to test our archive");
+        assert!(
+            test_status.success(),
+            "system 7z rejected our own {codec:?}-encoded archive as corrupt/invalid"
+        );
+
+        // 2. `7z x`: actually extract with the system binary and compare
+        //    bytes, proving round-trip correctness end to end, not just a
+        //    header-level integrity pass.
+        let extract_dir = dir.path().join("extracted");
+        std::fs::create_dir_all(&extract_dir).unwrap();
+        let extract_status = std::process::Command::new(&seven_zip)
+            .arg("x")
+            .arg(&archive_path)
+            .arg(format!("-o{}", extract_dir.display()))
+            .arg("-y")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .expect("failed to spawn system 7z to extract our archive");
+        assert!(
+            extract_status.success(),
+            "system 7z failed to extract our own {codec:?}-encoded archive"
+        );
+
+        let top = std::fs::read(extract_dir.join("top.txt")).unwrap();
+        assert_eq!(top, b"top-level entry");
+        let nested = std::fs::read(extract_dir.join("nested").join("deep.bin")).unwrap();
+        assert_eq!(nested, payload, "{codec:?}: extracted bytes must match the original payload exactly");
+    }
+}
+
 fn which_7z() -> Option<String> {
     for candidate in ["7z", "7za", "7zr"] {
         if std::process::Command::new(candidate)
