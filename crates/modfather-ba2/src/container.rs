@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn registry_with_bsa_and_ba2_formats_dispatches_each_to_its_own_handler() {
         let mut registry = Registry::new();
-        registry.register(Box::new(modfather_bsa::container::BsaFormat));
+        registry.register(Box::new(modfather_bsa::container::Tes4BsaFormat));
         registry.register(Box::new(Ba2Format));
 
         let ba2_bytes = make_gnrl_bytes();

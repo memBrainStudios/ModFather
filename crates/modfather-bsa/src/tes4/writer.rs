@@ -5,8 +5,8 @@
 //! split itself lives in `modfather-vestibule`'s packing orchestration).
 
 use crate::error::{Error, Result};
-use crate::format::{archive_flags, MAGIC};
-use crate::hash;
+use crate::tes4::format::{archive_flags, MAGIC};
+use crate::tes4::hash;
 use std::io::{Seek, SeekFrom, Write};
 
 /// One file to pack, addressed by its VFS-relative folder and file name.

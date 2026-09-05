@@ -1,7 +1,7 @@
 //! BSA v103-105 reader with version-aware codec dispatch.
 
 use crate::error::{Error, Result};
-use crate::format::*;
+use crate::tes4::format::*;
 use std::io::{Read, Seek, SeekFrom};
 
 /// One file entry as seen from the public API.

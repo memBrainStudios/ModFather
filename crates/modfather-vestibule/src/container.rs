@@ -7,32 +7,46 @@
 //! itself, empty (see `sevenzip_re::container`'s doc comment for why it
 //! never pre-registers anything). Each format crate implements the trait
 //! pair for its own archive type (`sevenzip_re::container::SevenZipFormat`,
-//! `modfather_bsa::container::BsaFormat`,
+//! `modfather_bsa::container::{Tes3BsaFormat, Tes4BsaFormat}`,
 //! `modfather_ba2::container::Ba2Format`). `modfather-vestibule` is the
 //! first crate in the one-way custody chain (`7-Zip RE -> Vestibule ->
 //! Crucible -> ModFather`) that already depends on every one of them, so
 //! it is the correct place -- and the only correct place, without
 //! inverting that dependency direction -- to actually register all
-//! three together.
+//! of them together.
 //!
-//! When RAR support lands (license permitting), it becomes a fourth
-//! `ContainerFormat` implementation registered by exactly one more line
-//! in [`build_registry`]; nothing else in this module, or in any of its
+//! **This module is slated to move.** Per the project's later architecture
+//! decision ("Vestibule is a client of 7-Zip RE... at no time does
+//! Vestibule implement anything related to an archive"), assembling this
+//! registry is archive-format logic and does not belong in
+//! `modfather-vestibule` long-term; it is staying here only until the
+//! 7-Zip RE / Vestibule dependency-direction question referenced in that
+//! decision is resolved. Do not build new archive-related functionality on
+//! top of this module.
+//!
+//! When RAR support lands (license permitting), it becomes one more
+//! `ContainerFormat` implementation registered by one more line in
+//! [`build_registry`]; nothing else in this module, or in any of its
 //! callers, needs to change -- that is the point of the pattern.
 
 use sevenzip_re::container::Registry;
 
 /// Build the one [`Registry`] with every currently-implemented container
-/// format registered: 7z (via `sevenzip-re` itself), BSA, and BA2.
+/// format registered: 7z (via `sevenzip-re` itself), both BSA generations
+/// (Morrowind's [`modfather_bsa::container::Tes3BsaFormat`] and Oblivion-
+/// through-Skyrim's [`modfather_bsa::container::Tes4BsaFormat`]), and BA2.
 ///
 /// Registration order does not currently matter (7z/BSA/BA2 magics never
-/// overlap), but is listed in "custody chain" order for readability: the
-/// standalone engine first, then each Bethesda extension.
+/// overlap, and the two BSA generations' magics are disjoint from each
+/// other too), but is listed in "custody chain" order for readability: the
+/// standalone engine first, then each Bethesda extension, oldest BSA
+/// generation first.
 pub fn build_registry() -> Registry {
     let mut registry = Registry::new();
     registry
         .register(Box::new(sevenzip_re::container::SevenZipFormat))
-        .register(Box::new(modfather_bsa::container::BsaFormat))
+        .register(Box::new(modfather_bsa::container::Tes3BsaFormat))
+        .register(Box::new(modfather_bsa::container::Tes4BsaFormat))
         .register(Box::new(modfather_ba2::container::Ba2Format));
     registry
 }
@@ -85,15 +99,15 @@ mod tests {
 
     /// The composed proof this module exists for: one [`Registry`],
     /// built once by [`build_registry`], correctly probes and dispatches
-    /// three real archives of three different formats -- 7z, BSA, and
-    /// BA2 -- to their own handler, purely from magic bytes, with no
+    /// real archives of different formats -- 7z, (TES4) BSA, and BA2 --
+    /// to their own handler, purely from magic bytes, with no
     /// caller-side format switch anywhere. This is the "modular payload"
     /// architecture the user asked for, exercised end to end rather than
     /// per-crate in isolation.
     #[test]
     fn shared_registry_dispatches_7z_bsa_and_ba2_each_to_their_own_handler() {
         let registry = build_registry();
-        assert_eq!(registry.len(), 3);
+        assert_eq!(registry.len(), 4);
 
         let mut sevenzip_handle = registry.open(Box::new(Cursor::new(make_7z_bytes()))).unwrap();
         assert_eq!(sevenzip_handle.format_name(), "7z");

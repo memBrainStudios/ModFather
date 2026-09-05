@@ -7,7 +7,8 @@ use std::io::{Cursor, Write};
 
 /// Build a minimal single-folder, single-file BSA archive by hand,
 /// matching the header/folder-record/file-record/name-table layout
-/// documented in `crates/modfather-bsa/src/format.rs` and the UESP spec.
+/// documented in `crates/modfather-bsa/src/tes4/format.rs` and the UESP
+/// spec.
 fn build_bsa_archive(
     version: u32,
     folder: &str,
@@ -15,7 +16,7 @@ fn build_bsa_archive(
     is_compressed: bool,
     payload_on_disk: &[u8],
 ) -> Vec<u8> {
-    use modfather_bsa::format::archive_flags;
+    use modfather_bsa::tes4::format::archive_flags;
 
     let mut buf = Vec::new();
     buf.extend_from_slice(b"BSA\0");
