@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/sevenzip-re",
+    "crates/modfather-bsa",
+    "crates/modfather-ba2",
+    "crates/modfather-7zre",
+    "crates/modfather-vestibule",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/memBrainStudios/ModFather"
+
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+opt-level = 3

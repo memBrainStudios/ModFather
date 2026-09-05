@@ -1,0 +1,23 @@
+[package]
+name = "modfather-bsa"
+version = "0.1.0"
+description = "Bethesda BSA (v103-105) archive extension for 7-Zip RE. Separate deliverable from the sevenzip-re standalone package."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sevenzip-re = { path = "../sevenzip-re" }
+flate2 = "1.1"
+lz4_flex = "0.14"
+crc32fast = "1.4"
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3"
+# Dev-only cross-validation oracle: an independently-written, 0BSD-licensed
+# BSA/BA2 crate used ONLY in tests to confirm our writer/reader agree with a
+# separate implementation of the same public spec (UESP). Never a runtime
+# dependency of this crate or of the ModFather product -- see
+# docs/SCHEDULE.md's Wave 0 gate note on real-world fixture validation.
+ba2 = "3.0"

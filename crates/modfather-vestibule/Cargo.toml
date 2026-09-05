@@ -1,0 +1,20 @@
+[package]
+name = "modfather-vestibule"
+version = "0.1.0"
+description = "Vestibule: VFS roots, last-wins layering with explicit picks, compare tooltips. A pure client of modfather-7zre -- never implements archive-format logic itself. Wave 0 floor."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+modfather-7zre = { path = "../modfather-7zre" }
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3"
+# Dev-only: `tests/wave0_gate.rs` reads modfather-7zre's packed-archive
+# output back with each format's own reader to verify the packed bytes
+# are real, spec-conforming archives. Never a dependency of this crate's
+# own (non-test) code -- see src/lib.rs's doc comment.
+modfather-bsa = { path = "../modfather-bsa" }
+modfather-ba2 = { path = "../modfather-ba2" }

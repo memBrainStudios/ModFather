@@ -1,0 +1,36 @@
+[package]
+name = "modfather-ba2"
+version = "0.1.0"
+description = "Bethesda BA2 (GNRL/DX10) archive extension for 7-Zip RE. Separate deliverable from the sevenzip-re standalone package."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sevenzip-re = { path = "../sevenzip-re" }
+flate2 = "1.1"
+lz4_flex = "0.14"
+crc32fast = "1.4"
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3"
+# Dev-only: cross-format registry test (confirms the shared
+# `sevenzip_re::container::Registry` dispatches a BA2 archive to
+# `Ba2Format` and a BSA archive to `modfather_bsa::container::BsaFormat`
+# in the same registry, without either crate depending on the other at
+# runtime). Never a runtime dependency of this crate.
+modfather-bsa = { path = "../modfather-bsa" }
+# Dev-only cross-validation oracle: an independently-written, 0BSD-licensed
+# BSA/BA2 crate used ONLY in tests to confirm our writer/reader agree with a
+# separate implementation of the same public spec. Never a runtime
+# dependency of this crate or of the ModFather product -- see
+# docs/SCHEDULE.md's Wave 0 gate note on real-world fixture validation.
+ba2 = "3.0"
+# Also dev-only: needed to work around a bug in ba2 v3.0.1's own
+# Chunk::decompress_into for the LZ4 branch (see the doc comment on
+# `our_writer_is_readable_by_independent_oracle` in
+# tests/oracle_cross_validation.rs for the full writeup) by calling the
+# same underlying LZ4 decompressor ba2 uses, with a correctly-sized
+# destination buffer.
+lzzzz = "1.1"
