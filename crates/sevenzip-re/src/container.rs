@@ -21,17 +21,19 @@
 //!
 //! It never registers BSA/BA2 (or, once licensed, RAR) itself: that would
 //! require `sevenzip-re` to depend on the Bethesda extension crates,
-//! inverting the one-way custody chain (`7-Zip RE -> Vestibule -> Crucible
-//! -> ModFather`, `docs/SCHEDULE.md`). Each extension crate instead
-//! implements this same trait pair for its own archive type (see
-//! `modfather_bsa::container`, `modfather_ba2::container`), and
-//! `modfather-vestibule` -- the crate that already depends on all of
-//! them -- is where one shared [`Registry`] gets every format registered
-//! into it (see `modfather_vestibule::container::build_registry`). A
-//! future RAR crate slots in the same way once a license is secured:
-//! implement the trait pair, register it, and every existing caller of
-//! `Registry::open` picks it up with zero code changes on their end --
-//! that is the whole point of the pattern.
+//! inverting the one-way custody chain (`7-Zip RE + extensions ->
+//! modfather-7zre -> Vestibule -> Crucible -> ModFather`,
+//! `docs/SCHEDULE.md`). Each extension crate instead implements this same
+//! trait pair for its own archive type (see `modfather_bsa::container`,
+//! `modfather_ba2::container`), and `modfather-7zre` -- the crate that
+//! already depends on all of them, inserted specifically so Vestibule
+//! itself never has to -- is where one shared [`Registry`] gets every
+//! format registered into it (see
+//! `modfather_7zre::container::build_registry`). A future RAR crate slots
+//! in the same way once a license is secured: implement the trait pair,
+//! register it, and every existing caller of `Registry::open` picks it up
+//! with zero code changes on their end -- that is the whole point of the
+//! pattern.
 
 use std::io::{Read, Seek, SeekFrom};
 

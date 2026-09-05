@@ -1,0 +1,16 @@
+[package]
+name = "modfather-7zre"
+version = "0.1.0"
+description = "7-Zip RE's Vestibule-facing integration layer: assembles the shared sevenzip_re::container::Registry across every Bethesda archive extension (modfather-bsa, modfather-ba2) and owns pack-back naming (BSA/BA2 Main+Textures) plus the minimal DDS metadata parsing that feeds BA2's DX10 packer. Vestibule depends on this crate and never touches sevenzip-re/modfather-bsa/modfather-ba2 directly."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sevenzip-re = { path = "../sevenzip-re" }
+modfather-bsa = { path = "../modfather-bsa" }
+modfather-ba2 = { path = "../modfather-ba2" }
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3"

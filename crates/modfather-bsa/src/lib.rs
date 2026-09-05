@@ -53,9 +53,11 @@ pub mod tes4;
 pub use error::{Error, Result};
 
 // Re-exported for backward compatibility with existing callers (e.g.
-// `modfather-vestibule::packing`) written before the tes3/tes4 split, all
-// of which only ever meant the tes4 (v103-105) family -- `modfather-bsa`
-// had no other family until this turn. New code should prefer the
-// explicit `modfather_bsa::tes4::*` / `modfather_bsa::tes3::*` paths so it
-// is unambiguous which BSA generation is in play.
+// `modfather-7zre::packing`, at the time this re-export was added still
+// named `modfather-vestibule::packing`, before the later move described
+// in `docs/SCHEDULE.md`) written before the tes3/tes4 split, all of which
+// only ever meant the tes4 (v103-105) family -- `modfather-bsa` had no
+// other family until this turn. New code should prefer the explicit
+// `modfather_bsa::tes4::*` / `modfather_bsa::tes3::*` paths so it is
+// unambiguous which BSA generation is in play.
 pub use tes4::{write, BsaArchive, BsaEntry, FileToPack, WriteOptions};

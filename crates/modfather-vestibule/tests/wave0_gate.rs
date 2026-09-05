@@ -19,23 +19,29 @@
 //! - `modfather-bsa/tests/oracle_cross_validation.rs` and
 //!   `modfather-ba2/tests/oracle_cross_validation.rs` (list/extract a
 //!   real-format BSA/BA2 against an independent oracle implementation).
-//! - `modfather-vestibule/src/packing.rs` unit tests (pack-back naming).
+//! - `modfather-7zre/src/packing.rs` unit tests (pack-back naming).
 //! - `modfather-vestibule/src/layering.rs` unit tests (manual pick
 //!   overrides last-wins on one path).
 //!
 //! What none of those prove on their own is that the pieces **compose**:
-//! that a stem packed by [`modfather_vestibule::packing`] is a real,
+//! that a stem packed by [`modfather_7zre::packing`] is a real,
 //! spec-conforming archive its own crate's reader can list and extract
 //! (the "list + extract ... through the extension crates" half of the
 //! gate, applied to *our own* pack-back output, not just a synthetic
 //! fixture), and that the resulting per-MOD contribution set is exactly
 //! what [`modfather_vestibule::layering`] resolves with a manual pick
 //! overriding last-wins on one path and nothing else. This test wires
-//! that whole chain together the way Vestibule -- the crate with custody
-//! of files per `docs/SCHEDULE.md` -- actually would.
+//! that whole chain together the way Vestibule -- a client of
+//! `modfather-7zre`, with custody of files per `docs/SCHEDULE.md` --
+//! actually would: pack through `modfather-7zre`, layer through
+//! Vestibule's own `layering`. The two helper functions below read the
+//! packed bytes back with `modfather-bsa`'s/`modfather-ba2`'s own readers
+//! (dev-dependencies of this crate, see `Cargo.toml`) purely to verify
+//! `modfather-7zre`'s pack-back output is real and spec-conforming --
+//! Vestibule's own (non-test) code never does this.
 
+use modfather_7zre::packing::{pack_ba2_stem, pack_bsa_stem, LooseFile};
 use modfather_vestibule::layering::{resolve, LayerSource, VfsPath};
-use modfather_vestibule::packing::{pack_ba2_stem, pack_bsa_stem, LooseFile};
 use std::collections::HashMap;
 
 fn loose(path: &str, data: &[u8]) -> LooseFile {

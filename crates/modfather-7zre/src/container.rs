@@ -8,21 +8,21 @@
 //! never pre-registers anything). Each format crate implements the trait
 //! pair for its own archive type (`sevenzip_re::container::SevenZipFormat`,
 //! `modfather_bsa::container::{Tes3BsaFormat, Tes4BsaFormat}`,
-//! `modfather_ba2::container::Ba2Format`). `modfather-vestibule` is the
-//! first crate in the one-way custody chain (`7-Zip RE -> Vestibule ->
-//! Crucible -> ModFather`) that already depends on every one of them, so
-//! it is the correct place -- and the only correct place, without
-//! inverting that dependency direction -- to actually register all
-//! of them together.
+//! `modfather_ba2::container::Ba2Format`). `modfather-7zre` is the crate
+//! that depends on every one of them (see this crate's own top-level doc
+//! comment for why `sevenzip-re` itself cannot be that crate, and why
+//! `modfather-vestibule` must not be either), so it is the correct place
+//! -- and the only correct place, without inverting the custody chain's
+//! dependency direction -- to actually register all of them together.
 //!
-//! **This module is slated to move.** Per the project's later architecture
-//! decision ("Vestibule is a client of 7-Zip RE... at no time does
-//! Vestibule implement anything related to an archive"), assembling this
-//! registry is archive-format logic and does not belong in
-//! `modfather-vestibule` long-term; it is staying here only until the
-//! 7-Zip RE / Vestibule dependency-direction question referenced in that
-//! decision is resolved. Do not build new archive-related functionality on
-//! top of this module.
+//! **This module used to live in `modfather-vestibule`.** Per the
+//! project's architecture decision ("Vestibule is a client of 7-Zip
+//! RE... at no time does Vestibule implement anything related to an
+//! archive"), assembling this registry is archive-format logic and does
+//! not belong in Vestibule; it moved here, to `modfather-7zre`, which sits
+//! between the format crates and Vestibule in the custody chain
+//! specifically so Vestibule can depend on one crate that already depends
+//! on every format, without ever naming a format crate itself.
 //!
 //! When RAR support lands (license permitting), it becomes one more
 //! `ContainerFormat` implementation registered by one more line in

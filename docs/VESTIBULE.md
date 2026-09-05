@@ -4,15 +4,17 @@ File management member of ModFather. ModFather is the project. FOMOD is the UI. 
 
 ## Members
 
-- **7-Zip RE** — immutable source archives; extract download-repo → VCS; pack packable loose per Bethesda doctrine when LOOT allows. RAR extraction is a placeholder pending license.
+- **7-Zip RE** — owns *all* archive logic for this project (7z, BSA, BA2, and later RAR/ZIP): immutable source archives; extract download-repo → VCS; pack packable loose per Bethesda doctrine when LOOT allows. RAR extraction is a placeholder pending license. **Vestibule is a client of 7-Zip RE and never implements anything related to an archive itself.**
 - **LOOT** — generalized sorter: Nexus categories (user may use or modify them), traditional masterlist, and user-created rules.
+- **MOD / MGE** — Vestibule's own domain, and explicitly *not* archives: a MOD (`<name>-<id>.mod`) and an MGE (`<profile>.mge`) are folders with an extension, each carrying its own config file (`mod.ini` / `mge.ini`). A MOD's folder holds one or more archives, accessed only through 7-Zip RE as a client, never by Vestibule reading archive bytes itself. See `docs/MGE.md`.
 
 Official 7-Zip reference only: [memBrainStudios/7zip](https://github.com/memBrainStudios/7zip) (ip7z/7zip 26.02).
 
-## 7-Zip RE is two deliverables
+## 7-Zip RE is three deliverables
 
 - **Standalone package** (`sevenzip-re`) — a complete, independent Rust implementation of the 7z container and its core codecs (Copy, LZMA, LZMA2; more filters later). No Bethesda-specific code, no game dependency. It is redistributable on its own. RAR stays a placeholder pending license and ships in neither deliverable until then.
-- **Bethesda archive extension** (separate crate(s), e.g. `modfather-bsa`, `modfather-ba2`) — BSA (v103–105) and BA2 (GNRL/DX10) are Bethesda's own container formats, not 7z. They plug into 7-Zip RE's container registry as additional handlers, equal in standing to 7z, but they are **not bundled into the standalone package**. Vestibule depends on the standalone package plus these extension crates; a consumer who only wants general-purpose 7z support does not have to pull in Bethesda format code.
+- **Bethesda archive extension** (separate crate(s), e.g. `modfather-bsa`, `modfather-ba2`) — BSA (v103–105, plus Morrowind's older, structurally distinct TES3 generation) and BA2 (GNRL/DX10) are Bethesda's own container formats, not 7z. They plug into 7-Zip RE's container registry as additional handlers, equal in standing to 7z, but they are **not bundled into the standalone package**, and (per the custody-chain rule below) `sevenzip-re` never depends on them either.
+- **Vestibule-facing integration layer** (`modfather-7zre`) — depends on `sevenzip-re` plus every Bethesda extension crate, and owns everything that requires knowing about more than one of them at once: assembling the shared container registry, and Bethesda pack-back naming/DDS metadata for BA2 texture packing. This is the crate `modfather-vestibule` actually depends on; Vestibule itself never names `sevenzip-re`, `modfather-bsa`, or `modfather-ba2` directly, which is what keeps "Vestibule is a client of 7-Zip RE" true in the dependency graph, not just in prose.
 
 ### The container registry, concretely
 
@@ -21,7 +23,11 @@ Official 7-Zip reference only: [memBrainStudios/7zip](https://github.com/memBrai
 - `ContainerFormat` / `ContainerHandle` — the Strategy interface every format implements once (probe magic bytes, open, list entries, read an entry by index).
 - `Registry` — the Factory: holds every registered `ContainerFormat`, peeks a stream's header bytes, and dispatches `Registry::open` to whichever format's `probe` matches.
 
-`sevenzip-re` ships this mechanism **empty** plus its own `SevenZipFormat`/`SevenZipHandle` payload for 7z; it never registers BSA/BA2 itself, since that would mean the standalone package depending on Bethesda-specific crates, inverting the one-way custody chain. Each extension crate instead implements the same trait pair for its own archive type (`modfather_bsa::container::BsaFormat`, `modfather_ba2::container::Ba2Format`), and `modfather-vestibule::container::build_registry` is where all three are assembled into the one shared `Registry` actually used by Vestibule and anything downstream of it -- Vestibule is the first crate in the chain that already depends on every format extension, so it is the only correct place to do this without inverting that dependency direction. A future RAR crate (once licensed) slots in the same way: implement the trait pair, add one line to `build_registry`, and every existing caller of `Registry::open` picks it up with no other code changes.
+`sevenzip-re` ships this mechanism **empty** plus its own `SevenZipFormat`/`SevenZipHandle` payload for 7z; it never registers BSA/BA2 itself, since that would mean the standalone package depending on Bethesda-specific crates, inverting the one-way custody chain. Each extension crate instead implements the same trait pair for its own archive type (`modfather_bsa::container::{Tes3BsaFormat, Tes4BsaFormat}`, `modfather_ba2::container::Ba2Format`), and `modfather_7zre::container::build_registry` is where all of them are assembled into the one shared `Registry` actually used by Vestibule and anything downstream of it. `modfather-7zre` is the crate that already depends on every format extension without Vestibule having to -- it is the only correct place to do this without either inverting `sevenzip-re`'s own dependency direction or making Vestibule implement archive logic. A future RAR crate (once licensed) slots in the same way: implement the trait pair, add one line to `build_registry`, and every existing caller of `Registry::open` picks it up with no other code changes.
+
+Custody chain: `sevenzip-re` + Bethesda extensions -> `modfather-7zre` -> `modfather-vestibule` -> Crucible -> ModFather.
+
+Not yet implemented: a live, mountable filesystem view where an archive is "just another folder" (read and write in place, not just list/extract). The registry above only covers list/extract today; the transparent-filesystem integration is tracked as follow-up work on top of it.
 
 ## Lock slider
 
